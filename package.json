@@ -1,0 +1,8 @@
+{
+  "name": "liga-profesional",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "datos": "node scripts/build-data.mjs"
+  }
+}
