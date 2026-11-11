@@ -1,5 +1,5 @@
-import { TEAMS, logo, teamName } from "./teams.js";
-import { compactEvent } from "./compact.js";
+import { TEAMS, logo, teamName } from "./teams.js?v=3";
+import { compactEvent } from "./compact.js?v=3";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
