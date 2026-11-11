@@ -1,5 +1,8 @@
-import { TEAMS, logo, teamName } from "./teams.js?v=3";
-import { compactEvent } from "./compact.js?v=3";
+import { TEAMS, logo, teamName } from "./teams.js?v=4";
+import { compactEvent } from "./compact.js?v=4";
+import { confetti, fiestaSound } from "./fiesta.js?v=4";
+import { buildFacts } from "./datos.js?v=4";
+import { computeTables } from "./tables.js?v=4";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -17,7 +20,7 @@ const S = {
   ready: false,
   open: new Set(),
   flash: new Set(),
-  sel: { torneo: null, round: null, tTabla: null, tPlay: null, newsClub: "" },
+  sel: { torneo: null, round: null, tTabla: null, tPlay: null, newsClub: "", fact: 0, simT: null, simR: null, simTab: "promedios" },
 };
 
 const store = {
@@ -233,7 +236,7 @@ function viewPartidos() {
     const zh = zoneOf(e.h[0]), za = zoneOf(e.a[0]);
     return zh && zh === za ? "Zona " + zh : "Interzonal";
   };
-  return `
+  return `${factCard()}
     <div class="seg">${["A", "C"].map((k) => `<button data-torneo="${k}" class="${k === t ? "act" : ""}">${TORNEO[k]}</button>`).join("")}</div>
     <div class="chips">${keys.map((k) => `<button class="chip${k === round ? " act" : ""}${liveR.has(k) ? " live" : ""}" data-round="${k}">${label(k)}</button>`).join("")}</div>
     <div class="card"><h2>${TORNEO[t]} · ${label(round) || ""}<small>Tocá un partido para ver goles</small></h2>${matchesByDay(list, zTag)}</div>`;
@@ -363,13 +366,142 @@ function route() {
   return { r: r || "partidos", arg };
 }
 
+// ---------- Dato del día ----------
+let factsCache = { n: -1, list: [] };
+function facts() {
+  if (factsCache.n !== S.events.size || factsCache.stamp !== lastFixture) factsCache = { n: S.events.size, stamp: lastFixture, list: buildFacts(S.events.values()) };
+  return factsCache.list;
+}
+function factCard() {
+  const F = facts();
+  if (!F.length) return "";
+  const day = Math.floor((Date.now() - 3 * 3600000) / 86400000);
+  const f = F[(day + S.sel.fact) % F.length];
+  return `<div class="card fact"><div class="fi">${f.i}</div><div class="ft"><small>Dato del día</small>${esc(f.t)}</div>
+    ${f.club ? `<a href="#/club/${f.club}" class="fl">${img(f.club)}</a>` : ""}<button class="fn" data-nextfact>Otro dato ›</button></div>`;
+}
+
+// ---------- Pantalla grande ----------
+function tvCard(e) {
+  const last = e.g.at(-1);
+  return `<div class="tvm ${e.st}">
+    <div class="tvs">${statusLabel(e)}</div>
+    <div class="tvt th">${img(e.h[0])}<span>${esc(nameOf(e.h))}</span></div>
+    <div class="tvsc">${e.st === "pre" ? (e.tbd ? "–" : fHour.format(new Date(e.d))) : `${e.h[1] ?? 0}<i>-</i>${e.a[1] ?? 0}`}${e.h[2] != null ? `<small>(${e.h[2]}-${e.a[2]} pen)</small>` : ""}</div>
+    <div class="tvt ta">${img(e.a[0])}<span>${esc(nameOf(e.a))}</span></div>
+    <div class="tvg">${e.st !== "pre" && last ? `⚽ ${esc(last[2])} ${esc(last[1])}` : e.st === "pre" ? fDay.format(new Date(e.d)) : "&nbsp;"}</div>
+  </div>`;
+}
+function viewTV() {
+  const all = [...S.events.values()].sort((a, b) => a.d.localeCompare(b.d));
+  const live = all.filter((e) => e.st === "in");
+  const next = all.filter((e) => e.st === "pre" && e.sn !== "STATUS_POSTPONED").slice(0, 8);
+  const last = all.filter((e) => e.st === "post").slice(-8).reverse();
+  const sec = (t, list) => list.length ? `<h2 class="tvh">${t}</h2><div class="tvgrid">${list.map(tvCard).join("")}</div>` : "";
+  return `<div class="tvbar"><b>⚽ Liga Profesional</b><span id="tvclock">${fHour.format(new Date())}</span>
+      <span class="tvbtns"><button data-fs>⛶ Pantalla completa</button><a href="#/">✕ Salir</a></span></div>
+    ${live.length ? sec("🔴 En vivo", live) : `<p class="tvnone">No hay partidos en juego ahora. Cuando empiecen aparecen acá solos.</p>`}
+    ${sec("Próximos", next)}${live.length ? "" : sec("Últimos resultados", last)}`;
+}
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && !wakeLock && "wakeLock" in navigator) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => (wakeLock = null)); }
+    if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch {}
+}
+setInterval(() => { const c = $("#tvclock"); if (c) c.textContent = fHour.format(new Date()); }, 15000);
+
+function tvGoal(e, side, who) {
+  const col = TEAMS[side[0]]?.col || ["#0b3d2e", "#fff"];
+  const o = document.createElement("div");
+  o.className = "tvgoal";
+  o.style.background = `radial-gradient(circle at 50% 40%, ${col[0]}, #000 85%)`;
+  o.innerHTML = `${img(side[0])}<div class="gg">¡GOOOL!</div><div class="gt">${esc(nameOf(side))}</div><div class="gs">${esc(nameOf(e.h))} ${e.h[1]} - ${e.a[1]} ${esc(nameOf(e.a))}</div><div class="gw">${esc(who)}</div>`;
+  document.body.appendChild(o);
+  confetti(col, 5000);
+  setTimeout(() => o.remove(), 9000);
+  o.addEventListener("click", () => o.remove());
+}
+
+// ---------- Simulador ¿Y si…? ----------
+let sim = store.get("sim", {});
+const simTables = (ov) => computeTables(S.events.values(), ov, (id) => zoneOf(id));
+function delta(realList, id, pos) {
+  const was = realList.findIndex((r) => r.id === id) + 1;
+  const d = was - pos;
+  return d > 0 ? `<span class="up">▲${d}</span>` : d < 0 ? `<span class="dn">▼${-d}</span>` : "";
+}
+function simResults() {
+  const real = simTables({}), mine = simTables(sim);
+  const tab = S.sel.simTab, t = S.sel.simT || "C";
+  let head, rows;
+  if (tab === "promedios") {
+    head = `<th>#</th><th style="text-align:left">Equipo</th><th>Prom.</th><th>Pts</th><th>PJ</th>`;
+    rows = mine.promedios.map((r, i) => `<tr class="${r.id === mine.rel.byProm ? "down" : ""}"><td class="pos">${i + 1}</td>${teamCell(r.id)}<td class="pts">${r.prom.toFixed(3).replace(".", ",")}</td><td>${r.pts}</td><td>${r.pj}</td><td class="dl">${delta(real.promedios, r.id, i + 1)}</td></tr>`);
+  } else {
+    const list = tab === "anual" ? mine.anual : mine.zones[t][tab];
+    const realList = tab === "anual" ? real.anual : real.zones[t][tab];
+    head = `<th>#</th><th style="text-align:left">Equipo</th><th>Pts</th><th>PJ</th><th>DG</th>`;
+    rows = list.map((r, i) => {
+      const cls = tab === "anual" ? (i < 3 ? "lib" : "") + (r.id === mine.rel.byAnual ? " down" : "") : i < 8 ? "q" : "";
+      return `<tr class="${cls}"><td class="pos">${i + 1}</td>${teamCell(r.id)}<td class="pts">${r.pts}</td><td>${r.pj}</td><td>${r.gf - r.gc > 0 ? "+" : ""}${r.gf - r.gc}</td><td class="dl">${delta(realList, r.id, i + 1)}</td></tr>`;
+    });
+  }
+  const changed = Object.keys(sim).length;
+  const relTxt = `Descenderían: <b>${esc(teamName(mine.rel.byProm))}</b> (promedios) y <b>${esc(teamName(mine.rel.byAnual))}</b> (anual)` +
+    (mine.rel.byProm !== real.rel.byProm || mine.rel.byAnual !== real.rel.byAnual ? " ⚠️ cambia respecto de la realidad" : "");
+  return `<div class="seg">${[["promedios", "Promedios"], ["anual", "Anual"], ["A", "Zona A"], ["B", "Zona B"]].map(([k, l]) => `<button data-simtab="${k}" class="${k === tab ? "act" : ""}">${l}</button>`).join("")}</div>
+    <div class="card"><h2>Así quedaría${tab === "A" || tab === "B" ? " · " + TORNEO[t] : ""}<small>${changed ? plural(changed) : "sin cambios todavía"}</small></h2>
+    <div class="legend">${relTxt}</div>
+    <table class="t"><thead><tr>${head}<th></th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
+}
+const plural = (n) => `${n} resultado${n === 1 ? "" : "s"} cambiado${n === 1 ? "" : "s"}`;
+function viewSimulador() {
+  const t = S.sel.simT || "C";
+  const evs = [...S.events.values()].filter((e) => e.t === t && e.r === "reg");
+  const idx = roundsInfo(t);
+  const max = Math.max(0, ...Object.values(idx));
+  let r = S.sel.simR;
+  if (!r) {
+    const pend = evs.filter((e) => e.st !== "post").sort((a, b) => a.d.localeCompare(b.d))[0];
+    r = pend ? idx[pend.id] : max;
+  }
+  const list = evs.filter((e) => idx[e.id] === r).sort((a, b) => a.d.localeCompare(b.d));
+  const row = (e) => {
+    const ov = sim[e.id];
+    const real = e.st === "post" ? [e.h[1], e.a[1]] : null;
+    const v = ov || real || ["", ""];
+    return `<div class="simrow${ov ? " chg" : ""}">
+      <a class="team h" href="#/club/${e.h[0]}"><span>${esc(nameOf(e.h))}</span>${img(e.h[0])}</a>
+      <input type="number" min="0" max="20" inputmode="numeric" data-sim="${e.id}" data-side="0" value="${v[0]}">
+      <input type="number" min="0" max="20" inputmode="numeric" data-sim="${e.id}" data-side="1" value="${v[1]}">
+      <a class="team" href="#/club/${e.a[0]}">${img(e.a[0])}<span>${esc(nameOf(e.a))}</span></a>
+      <small class="real">${real ? `Real: ${real[0]}-${real[1]}` : "Sin jugar"}${ov ? ` · <button data-simreset="${e.id}">deshacer</button>` : ""}</small>
+    </div>`;
+  };
+  return `<div class="card simintro"><b>¿Y si…?</b> Cambiá cualquier resultado de la fase regular y mirá cómo quedarían las zonas, la tabla anual y los promedios. Las flechas comparan con la realidad. Lo que cambies queda guardado en este navegador.
+      ${Object.keys(sim).length ? `<button class="chip" data-simclear>Volver todo a la realidad</button>` : ""}</div>
+    <div class="grid2">
+      <div>
+        <div class="seg">${["A", "C"].map((k) => `<button data-simt="${k}" class="${k === t ? "act" : ""}">${TORNEO[k]}</button>`).join("")}</div>
+        <div class="chips">${Array.from({ length: max }, (_, i) => i + 1).map((n) => `<button class="chip${n === r ? " act" : ""}${evs.some((e) => idx[e.id] === n && sim[e.id]) ? " live" : ""}" data-simr="${n}">Fecha ${n}</button>`).join("")}</div>
+        <div class="card"><h2>${TORNEO[t]} · Fecha ${r}<small>Escribí los goles</small></h2>${list.map(row).join("") || `<p class="empty">Sin partidos.</p>`}</div>
+      </div>
+      <div id="simres">${simResults()}</div>
+    </div>`;
+}
+
 function render(keepScroll = true) {
   const y = window.scrollY;
   const { r, arg } = route();
   document.querySelectorAll("#tabs a").forEach((a) => a.classList.toggle("act", a.dataset.r === r || (r === "club" && a.dataset.r === "clubes")));
   const v = $("#view");
   if (!S.ready) { v.innerHTML = `<p class="loading">Cargando…</p>`; return; }
-  const views = { partidos: viewPartidos, posiciones: viewPosiciones, anual: viewAnual, promedios: viewPromedios, playoffs: viewPlayoffs, clubes: viewClubes, noticias: viewNoticias };
+  const views = { partidos: viewPartidos, posiciones: viewPosiciones, anual: viewAnual, promedios: viewPromedios, playoffs: viewPlayoffs, clubes: viewClubes, noticias: viewNoticias, tv: viewTV, simulador: viewSimulador };
+  document.body.classList.toggle("tv", r === "tv");
+  keepAwake(r === "tv");
+  if (r === "simulador" && document.activeElement?.dataset?.sim) return; // no pisar lo que se está escribiendo
   v.innerHTML = r === "club" ? viewClub(arg) : (views[r] || viewPartidos)();
   renderLiveStrip();
   v.querySelector(".chip.act")?.scrollIntoView({ block: "nearest", inline: "center" });
@@ -383,9 +515,16 @@ function renderLiveStrip() {
 }
 
 document.addEventListener("click", (ev) => {
-  const t = ev.target.closest("[data-torneo],[data-round],[data-ttabla],[data-tplay],[data-fav],[data-goto],.match");
+  const t = ev.target.closest("[data-torneo],[data-round],[data-ttabla],[data-tplay],[data-fav],[data-goto],[data-nextfact],[data-fs],[data-simt],[data-simr],[data-simtab],[data-simreset],[data-simclear],.match");
   if (!t) return;
-  if (t.dataset.torneo) { S.sel.torneo = t.dataset.torneo; S.sel.round = null; render(false); }
+  if (t.dataset.nextfact !== undefined) { S.sel.fact++; render(); }
+  else if (t.dataset.fs !== undefined) { const d = document.documentElement; document.fullscreenElement ? document.exitFullscreen() : d.requestFullscreen?.().catch(() => {}); ensureAudio(); }
+  else if (t.dataset.simt) { S.sel.simT = t.dataset.simt; S.sel.simR = null; render(false); }
+  else if (t.dataset.simr) { S.sel.simR = +t.dataset.simr; render(); }
+  else if (t.dataset.simtab) { S.sel.simTab = t.dataset.simtab; $("#simres").innerHTML = simResults(); }
+  else if (t.dataset.simreset) { delete sim[t.dataset.simreset]; store.set("sim", sim); render(); }
+  else if (t.dataset.simclear !== undefined) { sim = {}; store.set("sim", sim); render(); }
+  else if (t.dataset.torneo) { S.sel.torneo = t.dataset.torneo; S.sel.round = null; render(false); }
   else if (t.dataset.round) { S.sel.round = t.dataset.round; render(); }
   else if (t.dataset.ttabla) { S.sel.tTabla = t.dataset.ttabla; render(); }
   else if (t.dataset.tplay) { S.sel.tPlay = t.dataset.tplay; render(); }
@@ -410,6 +549,21 @@ document.addEventListener("click", (ev) => {
     S.open.has(id) ? S.open.delete(id) : S.open.add(id);
     t.classList.toggle("open");
   }
+});
+document.addEventListener("input", (ev) => {
+  const el = ev.target;
+  if (!el.dataset?.sim) return;
+  const id = el.dataset.sim, e = S.events.get(id);
+  const ins = document.querySelectorAll(`input[data-sim="${id}"]`);
+  const h = ins[0].value, a = ins[1].value;
+  if (h === "" || a === "") delete sim[id];
+  else {
+    const v = [Math.max(0, Math.min(20, +h)), Math.max(0, Math.min(20, +a))];
+    if (e?.st === "post" && v[0] === e.h[1] && v[1] === e.a[1]) delete sim[id]; else sim[id] = v;
+  }
+  store.set("sim", sim);
+  el.closest(".simrow")?.classList.toggle("chg", !!sim[id]);
+  $("#simres").innerHTML = simResults();
 });
 document.addEventListener("change", (ev) => {
   if (ev.target.id === "newsSel") { S.sel.newsClub = ev.target.value; render(false); }
@@ -460,8 +614,13 @@ function goalAlert(e, side) {
   const txt = `${nameOf(e.h)} ${e.h[1]} - ${e.a[1]} ${nameOf(e.a)}`;
   const who = last ? `${last[2]} ${last[1]}${last[3] === "o" ? " (en contra)" : last[3] === "p" ? " (penal)" : ""}` : (e.clk || "");
   S.flash.add(e.id); setTimeout(() => S.flash.delete(e.id), 2500);
-  if (!wants) return;
-  bell();
+  const isTV = route().r === "tv";
+  const fav = favs.has(side[0]);
+  if (isTV) tvGoal(e, side, who);
+  else if (fav) confetti(TEAMS[side[0]]?.col);
+  if (!wants && !isTV) return;
+  if (wants) fav ? fiestaSound(audio) : bell();
+  if (isTV) return;
   navigator.vibrate?.([200, 100, 200]);
   const t = document.createElement("div");
   t.className = "toast";
@@ -476,10 +635,12 @@ function goalAlert(e, side) {
 
 $("#probar").addEventListener("click", () => {
   ensureAudio();
-  const e = [...S.events.values()].filter((x) => x.st === "post" && x.g.length).at(-1);
+  const done = [...S.events.values()].filter((x) => x.st === "post" && x.g.length);
+  const e = done.filter((x) => x.g.some((g) => favs.has(g[0]))).at(-1) || done.at(-1);
   if (!e) return bell();
   const prev = alertMode; if (alertMode === "off") alertMode = "all";
-  goalAlert(e, e.g.at(-1)[0] === e.a[0] ? e.a : e.h);
+  const g = [...e.g].reverse().find((x) => favs.has(x[0])) || e.g.at(-1);
+  goalAlert(e, g[0] === e.a[0] ? e.a : e.h);
   alertMode = prev;
 });
 
