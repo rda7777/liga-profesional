@@ -3,6 +3,7 @@
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { compactEvent } from "../js/compact.js";
 import { TEAMS } from "../js/teams.js";
+import { matchVideos } from "../js/videos.js";
 
 const ESPN = "https://site.api.espn.com/apis/site/v2/sports/soccer/arg.1/scoreboard";
 const year = new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric" });
@@ -63,10 +64,54 @@ async function noticias(prev) {
   return out;
 }
 
+// ---------- Resúmenes en YouTube (canal oficial @LigaProfesional) ----------
+const YT_HEADERS = { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36", "accept-language": "es-AR,es;q=0.9", cookie: "SOCS=CAI; CONSENT=YES+1" };
+function grabVideos(str, into) {
+  for (const m of str.matchAll(/"contentId":"([\w-]{11})".*?"lockupMetadataViewModel":\{"title":\{"content":"((?:[^"\\]|\\.)*)"/g)) {
+    try { into.push([m[1], JSON.parse('"' + m[2] + '"')]); } catch {}
+  }
+  for (const m of str.matchAll(/"playlistVideoRenderer":\{"videoId":"([\w-]{11})".*?"title":\{"runs":\[\{"text":"((?:[^"\\]|\\.)*)"/g)) {
+    try { into.push([m[1], JSON.parse('"' + m[2] + '"')]); } catch {}
+  }
+}
+async function youtube(events, prev) {
+  const known = new Set(Object.values(prev || {}));
+  const ch = await (await fetch("https://www.youtube.com/@LigaProfesional", { headers: YT_HEADERS })).text();
+  const id = (ch.match(/"externalId":"(UC[\w-]{22})"/) || ch.match(/"channelId":"(UC[\w-]{22})"/) || [])[1];
+  if (!id) throw new Error("No encontré el canal");
+  const ver = (ch.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/) || [])[1] || "2.20250101.00.00";
+  const page = await (await fetch(`https://www.youtube.com/playlist?list=UU${id.slice(2)}`, { headers: YT_HEADERS })).text();
+  const vids = [];
+  grabVideos(page, vids);
+  let tok = (page.match(/"continuationCommand":\{"token":"([^"]+)"/) || [])[1];
+  // Los videos vienen del más nuevo al más viejo: corto cuando llego a videos ya conocidos o al año anterior.
+  for (let i = 0; tok && i < 30; i++) {
+    const recent = vids.slice(-60);
+    if (known.size && recent.some(([v]) => known.has(v))) break;
+    if (recent.length && recent.every(([, t]) => !t.includes(String(year)))) break;
+    const r = await fetch("https://www.youtube.com/youtubei/v1/browse?prettyPrint=false", {
+      method: "POST", headers: { ...YT_HEADERS, "content-type": "application/json" },
+      body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: ver, hl: "es", gl: "AR" } }, continuation: tok }),
+    });
+    const t = await r.text();
+    grabVideos(t, vids);
+    tok = (t.match(/"continuationCommand":\{"token":"([^"]+)"/) || [])[1];
+  }
+  return { ...(prev || {}), ...matchVideos(vids, events, Number(year)) };
+}
+
 await mkdir("data", { recursive: true });
 const p = await partidos();
 await writeFile("data/partidos.json", JSON.stringify(p));
 console.log("partidos:", p.events.length);
+
+let prevV = null;
+try { prevV = JSON.parse(await readFile("data/videos.json", "utf8")); } catch {}
+try {
+  const v = await youtube(p.events, prevV);
+  await writeFile("data/videos.json", JSON.stringify(v));
+  console.log("videos:", Object.keys(v).length);
+} catch (e) { console.error("videos", e.message); }
 
 let prev = null;
 try { prev = JSON.parse(await readFile("data/noticias.json", "utf8")); } catch {}

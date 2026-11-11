@@ -1,5 +1,5 @@
 // "Dato del día": curiosidades calculadas con los partidos del año.
-import { teamName } from "./teams.js?v=5";
+import { teamName } from "./teams.js?v=6";
 
 const minute = (clk) => {
   const m = String(clk).match(/(\d+)'?(?:\s*\+\s*(\d+))?/);

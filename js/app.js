@@ -1,8 +1,8 @@
-import { TEAMS, logo, teamName } from "./teams.js?v=5";
-import { compactEvent } from "./compact.js?v=5";
-import { confetti, fiestaSound } from "./fiesta.js?v=5";
-import { buildFacts } from "./datos.js?v=5";
-import { computeTables } from "./tables.js?v=5";
+import { TEAMS, logo, teamName } from "./teams.js?v=6";
+import { compactEvent } from "./compact.js?v=6";
+import { confetti, fiestaSound } from "./fiesta.js?v=6";
+import { buildFacts } from "./datos.js?v=6";
+import { computeTables } from "./tables.js?v=6";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -17,6 +17,7 @@ const S = {
   events: new Map(),
   standings: { A: null, C: null },
   news: null,
+  videos: {},
   ready: false,
   open: new Set(),
   flash: new Set(),
@@ -96,6 +97,19 @@ async function loadStandings() {
       if (Object.keys(zones).length) S.standings[t] = zones;
     } catch (e) { console.warn("standings", t, e); }
   }));
+}
+
+async function loadVideos() {
+  for (const base of ["data/", REPO_RAW]) {
+    try { S.videos = await getJSON(base + "videos.json?t=" + Date.now()); return; } catch {}
+  }
+}
+function videoLink(e, cls = "vid") {
+  if (e.st !== "post" || !(e.t === "A" || e.t === "C")) return "";
+  const id = S.videos[e.id];
+  if (id) return `<a class="${cls}" href="https://www.youtube.com/watch?v=${encodeURIComponent(id)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Resumen en el canal oficial de la Liga">▶ Goles</a>`;
+  const q = encodeURIComponent(`${nameOf(e.h)} ${nameOf(e.a)} resumen`);
+  return `<a class="${cls} srch" href="https://www.youtube.com/@LigaProfesional/search?query=${q}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Buscar el resumen en YouTube">▶ Buscar</a>`;
 }
 
 async function loadNews() {
@@ -185,7 +199,8 @@ function matchRow(e, opts = {}) {
       <div class="score ${e.st}">${show ? `${e.h[1] ?? 0} - ${e.a[1] ?? 0}` : "vs"}${pens}</div>
       <a class="team${aw ? " win" : ""}" href="#/club/${e.a[0]}" onclick="event.stopPropagation()">${img(e.a[0])}<span>${esc(nameOf(e.a))}</span></a>
     </div>
-    <div class="mdet"><div class="hcol">${gh.join("<br>") || ""}</div><div>${ga.join("<br>") || ""}</div>
+    ${gh.length || ga.length || e.st === "post" ? `<div class="mgoals"><div></div><div class="hcol">${gh.join("<br>")}</div><div class="vcol">${videoLink(e)}</div><div>${ga.join("<br>")}</div></div>` : ""}
+    <div class="mdet">
       <div class="venue">${e.v ? "🏟 " + esc(e.v) + " · " : ""}${fDay.format(new Date(e.d))}${e.tbd ? "" : " " + fHour.format(new Date(e.d))}</div></div>
   </div>`;
 }
@@ -239,7 +254,7 @@ function viewPartidos() {
   return `${factCard()}
     <div class="seg">${["A", "C"].map((k) => `<button data-torneo="${k}" class="${k === t ? "act" : ""}">${TORNEO[k]}</button>`).join("")}</div>
     <div class="chips">${keys.map((k) => `<button class="chip${k === round ? " act" : ""}${liveR.has(k) ? " live" : ""}" data-round="${k}">${label(k)}</button>`).join("")}</div>
-    <div class="card"><h2>${TORNEO[t]} · ${label(round) || ""}<small>Tocá un partido para ver goles</small></h2>${matchesByDay(list, zTag)}</div>`;
+    <div class="card"><h2>${TORNEO[t]} · ${label(round) || ""}<small>Tocá un partido para ver el estadio</small></h2>${matchesByDay(list, zTag)}</div>`;
 }
 
 function viewPosiciones() {
@@ -699,6 +714,8 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) poll
   S.ready = true;
   render(false); stamp();
   loadNews().then(() => render());
+  loadVideos().then(() => render());
+  setInterval(() => loadVideos().then(() => render()), 15 * 60000);
   setInterval(() => loadNews().then(() => { const r = route().r; if (r === "noticias" || r === "club") render(); }), 15 * 60000);
   poll();
 })();
