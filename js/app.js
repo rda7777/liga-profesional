@@ -191,7 +191,7 @@ function matchesByDay(list, tagFn) {
   let html = "", last = "";
   for (const e of list) {
     const k = dayKey(e.d);
-    if (k !== last) { html += `<div class="day">${e.tbd ? "Fecha y hora a confirmar · " : ""}${fDay.format(new Date(e.d))}</div>`; last = k; }
+    if (k !== last) { html += `<div class="day">${e.tbd ? "<span class=\"nc\">Fecha y hora a confirmar · </span>" : ""}${fDay.format(new Date(e.d))}</div>`; last = k; }
     html += matchRow(e, { tag: tagFn?.(e) });
   }
   return html || `<p class="empty">Sin partidos.</p>`;
@@ -372,6 +372,7 @@ function render(keepScroll = true) {
   const views = { partidos: viewPartidos, posiciones: viewPosiciones, anual: viewAnual, promedios: viewPromedios, playoffs: viewPlayoffs, clubes: viewClubes, noticias: viewNoticias };
   v.innerHTML = r === "club" ? viewClub(arg) : (views[r] || viewPartidos)();
   renderLiveStrip();
+  v.querySelector(".chip.act")?.scrollIntoView({ block: "nearest", inline: "center" });
   if (keepScroll) window.scrollTo(0, y);
 }
 
@@ -472,6 +473,15 @@ function goalAlert(e, side) {
     try { new Notification(`⚽ ¡GOL de ${nameOf(side)}!`, { body: `${txt}\n${who}`, icon: logo(side[0]), tag: "gol-" + e.id }); } catch {}
   }
 }
+
+$("#probar").addEventListener("click", () => {
+  ensureAudio();
+  const e = [...S.events.values()].filter((x) => x.st === "post" && x.g.length).at(-1);
+  if (!e) return bell();
+  const prev = alertMode; if (alertMode === "off") alertMode = "all";
+  goalAlert(e, e.g.at(-1)[0] === e.a[0] ? e.a : e.h);
+  alertMode = prev;
+});
 
 // ---------- En vivo ----------
 let pollTimer = null, lastStandings = 0, lastFixture = 0;
