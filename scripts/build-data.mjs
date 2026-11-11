@@ -66,24 +66,27 @@ async function noticias(prev) {
 
 // ---------- Resúmenes en YouTube (canal oficial @LigaProfesional) ----------
 const YT_HEADERS = { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36", "accept-language": "es-AR,es;q=0.9", cookie: "SOCS=CAI; CONSENT=YES+1" };
-function grabVideos(str, into) {
-  for (const m of str.matchAll(/"contentId":"([\w-]{11})".*?"lockupMetadataViewModel":\{"title":\{"content":"((?:[^"\\]|\\.)*)"/g)) {
-    try { into.push([m[1], JSON.parse('"' + m[2] + '"')]); } catch {}
-  }
-  for (const m of str.matchAll(/"playlistVideoRenderer":\{"videoId":"([\w-]{11})".*?"title":\{"runs":\[\{"text":"((?:[^"\\]|\\.)*)"/g)) {
-    try { into.push([m[1], JSON.parse('"' + m[2] + '"')]); } catch {}
-  }
+// Recorre el JSON de YouTube y toma cada video como un bloque completo (id + título del mismo video).
+function walkVideos(o, into) {
+  if (!o || typeof o !== "object") return;
+  const l = o.lockupViewModel;
+  if (l?.contentId && l.metadata?.lockupMetadataViewModel?.title?.content) into.push([l.contentId, l.metadata.lockupMetadataViewModel.title.content]);
+  const p = o.playlistVideoRenderer;
+  const pt = p?.title?.runs?.[0]?.text || p?.title?.simpleText;
+  if (p?.videoId && pt) into.push([p.videoId, pt]);
+  for (const k in o) walkVideos(o[k], into);
 }
 async function youtube(events, prev) {
-  const known = new Set(Object.values(prev || {}));
+  const known = new Set(Object.entries(prev || {}).filter(([k]) => k !== "_v").map(([, v]) => v));
   const ch = await (await fetch("https://www.youtube.com/@LigaProfesional", { headers: YT_HEADERS })).text();
   const id = (ch.match(/"externalId":"(UC[\w-]{22})"/) || ch.match(/"channelId":"(UC[\w-]{22})"/) || [])[1];
   if (!id) throw new Error("No encontré el canal");
   const ver = (ch.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/) || [])[1] || "2.20250101.00.00";
   const page = await (await fetch(`https://www.youtube.com/playlist?list=UU${id.slice(2)}`, { headers: YT_HEADERS })).text();
   const vids = [];
-  grabVideos(page, vids);
-  let tok = (page.match(/"continuationCommand":\{"token":"([^"]+)"/) || [])[1];
+  const init = JSON.parse(page.match(/var ytInitialData = (\{.*?\});<\/script>/s)[1]);
+  walkVideos(init, vids);
+  let tok = (JSON.stringify(init).match(/"continuationCommand":\{"token":"([^"]+)"/) || [])[1];
   // Los videos vienen del más nuevo al más viejo: corto cuando llego a videos ya conocidos o al año anterior.
   for (let i = 0; tok && i < 30; i++) {
     const recent = vids.slice(-60);
@@ -94,10 +97,10 @@ async function youtube(events, prev) {
       body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: ver, hl: "es", gl: "AR" } }, continuation: tok }),
     });
     const t = await r.text();
-    grabVideos(t, vids);
+    walkVideos(JSON.parse(t), vids);
     tok = (t.match(/"continuationCommand":\{"token":"([^"]+)"/) || [])[1];
   }
-  return { ...(prev || {}), ...matchVideos(vids, events, Number(year)) };
+  return { ...(prev || {}), ...matchVideos(vids, events, Number(year)), _v: 2 };
 }
 
 await mkdir("data", { recursive: true });
@@ -106,7 +109,7 @@ await writeFile("data/partidos.json", JSON.stringify(p));
 console.log("partidos:", p.events.length);
 
 let prevV = null;
-try { prevV = JSON.parse(await readFile("data/videos.json", "utf8")); } catch {}
+try { const raw = JSON.parse(await readFile("data/videos.json", "utf8")); if (raw._v === 2) prevV = raw; } catch {}
 try {
   const v = await youtube(p.events, prevV);
   await writeFile("data/videos.json", JSON.stringify(v));

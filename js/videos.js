@@ -40,7 +40,7 @@ export function matchVideos(videos, events, year) {
     const p = parseTitle(title);
     if (!p || (p.year && p.year !== year)) continue;
     const cands = evs.filter((e) => e.h[0] === p.h && e.a[0] === p.a && e.t === p.t && !out[e.id]);
-    const best = cands.find((e) => e.h[1] === p.hs && e.a[1] === p.as) || (cands.length === 1 ? cands[0] : null);
+    const best = cands.find((e) => e.h[1] === p.hs && e.a[1] === p.as);
     if (best) out[best.id] = vid;
   }
   return out;
