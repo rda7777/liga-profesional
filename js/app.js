@@ -1,8 +1,8 @@
-import { TEAMS, logo, teamName } from "./teams.js?v=4";
-import { compactEvent } from "./compact.js?v=4";
-import { confetti, fiestaSound } from "./fiesta.js?v=4";
-import { buildFacts } from "./datos.js?v=4";
-import { computeTables } from "./tables.js?v=4";
+import { TEAMS, logo, teamName } from "./teams.js?v=5";
+import { compactEvent } from "./compact.js?v=5";
+import { confetti, fiestaSound } from "./fiesta.js?v=5";
+import { buildFacts } from "./datos.js?v=5";
+import { computeTables } from "./tables.js?v=5";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -481,7 +481,7 @@ function viewSimulador() {
     </div>`;
   };
   return `<div class="card simintro"><b>¿Y si…?</b> Cambiá cualquier resultado de la fase regular y mirá cómo quedarían las zonas, la tabla anual y los promedios. Las flechas comparan con la realidad. Lo que cambies queda guardado en este navegador.
-      ${Object.keys(sim).length ? `<button class="chip" data-simclear>Volver todo a la realidad</button>` : ""}</div>
+      <button class="chip" data-simclear>Volver todo a la realidad</button></div>
     <div class="grid2">
       <div>
         <div class="seg">${["A", "C"].map((k) => `<button data-simt="${k}" class="${k === t ? "act" : ""}">${TORNEO[k]}</button>`).join("")}</div>
