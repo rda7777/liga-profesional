@@ -35,8 +35,23 @@ function decode(s) {
     .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'").trim();
 }
 
-async function rss(q, max = 8) {
-  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(q + " when:7d")}&hl=es-419&gl=AR&ceid=AR:es-419`;
+// ---------- Filtro de noticias por club ----------
+const nrm = (s) => " " + s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9' ]/g, " ").replace(/\s+/g, " ") + " ";
+const firstPos = (T, words) => Math.min(...words.map((w) => { const i = T.indexOf(" " + nrm(w).trim() + " "); return i < 0 ? Infinity : i; }));
+let OTHER = {}; // id -> nombre principal de cada club, para detectar notas sobre otro equipo
+// Se queda con la nota sólo si el título nombra al club y no está centrada en otro club.
+function relevant(title, id, kw, neg) {
+  const T = nrm(title);
+  if (neg.some((n) => T.includes(" " + nrm(n).trim() + " "))) return false;
+  const ours = firstPos(T, kw);
+  if (ours === Infinity) return false;
+  const mine = kw.map((k) => nrm(k).trim());
+  const others = Object.entries(OTHER).filter(([oid, n]) => oid !== id && !mine.some((m) => m.includes(nrm(n).trim()) || nrm(n).trim().includes(m))).map(([, n]) => n);
+  return ours <= firstPos(T, others);
+}
+
+async function rss(q, max = 8, days = 7) {
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(q + ` when:${days}d`)}&hl=es-419&gl=AR&ceid=AR:es-419`;
   const r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 liga-profesional" } });
   if (!r.ok) throw new Error(`${r.status}`);
   const xml = await r.text();
@@ -51,6 +66,11 @@ async function rss(q, max = 8) {
   items.sort((a, b) => b.date.localeCompare(a.date));
   return items.slice(0, max);
 }
+async function clubNews(id, q, kw, neg, max = 8) {
+  const items = await rss(q, 60, 4);
+  const seen = new Set();
+  return items.filter((n) => relevant(n.title, id, kw, neg) && !seen.has(n.title) && seen.add(n.title)).slice(0, max);
+}
 
 // Clubes de la Primera Nacional (nombres desde la tabla de ESPN)
 async function clubesNacional() {
@@ -64,8 +84,10 @@ async function noticias(prev, pn = {}) {
   const out = { updated: new Date().toISOString(), general: [], clubs: {} };
   try { out.general = await rss('"Liga Profesional" fútbol argentino', 20); }
   catch (e) { out.general = prev?.general || []; console.error("noticias general", e.message); }
+  OTHER = Object.fromEntries([...Object.entries(TEAMS).map(([id, t]) => [id, t.kw[0]]),
+    ...Object.entries(pn).map(([id, name]) => [id, name.replace(/\s*\(.*?\)\s*/g, " ").trim()])]);
   for (const [id, t] of Object.entries(TEAMS)) {
-    try { out.clubs[id] = await rss(t.q); }
+    try { out.clubs[id] = await clubNews(id, t.q, t.kw, t.neg); }
     catch (e) { out.clubs[id] = prev?.clubs?.[id] || []; console.error("noticias", t.short, e.message); }
     await new Promise((r) => setTimeout(r, 400));
   }
@@ -74,8 +96,9 @@ async function noticias(prev, pn = {}) {
   for (const [id, name] of Object.entries(pn)) {
     // "Colón (Santa Fe)" -> "Colón" "Santa Fe" fútbol argentino (evita homónimos de otros países)
     const m = name.match(/^(.*?)\s*\((.*?)\)\s*$/);
-    const q = m ? `"${m[1].trim()}" "${m[2].trim()}" fútbol` : `"${name.trim()}" fútbol argentino`;
-    try { out.clubs[id] = await rss(q, 6); }
+    const main = (m ? m[1] : name).trim();
+    const q = m ? `"${main}" "${m[2].trim()}" fútbol` : `"${main}" fútbol argentino`;
+    try { out.clubs[id] = await clubNews(id, q, [main], [], 6); }
     catch (e) { out.clubs[id] = prev?.clubs?.[id] || []; }
     await new Promise((r) => setTimeout(r, 400));
   }
