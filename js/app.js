@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=10";
-import { compactEvent } from "./compact.js?v=10";
-import { confetti, fiestaSound } from "./fiesta.js?v=10";
-import { buildFacts } from "./datos.js?v=10";
-import { computeTables } from "./tables.js?v=10";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=11";
+import { compactEvent } from "./compact.js?v=11";
+import { confetti, fiestaSound } from "./fiesta.js?v=11";
+import { buildFacts } from "./datos.js?v=11";
+import { computeTables } from "./tables.js?v=11";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
