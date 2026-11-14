@@ -1,14 +1,15 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=16";
-import { compactEvent } from "./compact.js?v=16";
-import { confetti, fiestaSound } from "./fiesta.js?v=16";
-import { buildFacts } from "./datos.js?v=16";
-import { computeTables } from "./tables.js?v=16";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=17";
+import { compactEvent } from "./compact.js?v=17";
+import { confetti, fiestaSound } from "./fiesta.js?v=17";
+import { buildFacts } from "./datos.js?v=17";
+import { computeTables } from "./tables.js?v=17";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
 const ESPN_SB = "https://site.api.espn.com/apis/site/v2/sports/soccer/arg.1/scoreboard";
 const ESPN_ST = "https://site.api.espn.com/apis/v2/sports/soccer/arg.1/standings";
 const SEASONTYPE = { A: 1, C: 6 };
+const PUSH_API = "https://liga-goles.ricardoaufranc.workers.dev";
 const NEWS_API = "https://liga-noticias.ricardoaufranc.workers.dev/";
 const ESPN_SB2 = "https://site.api.espn.com/apis/site/v2/sports/soccer/arg.2/scoreboard";
 const ESPN_ST2 = "https://site.api.espn.com/apis/v2/sports/soccer/arg.2/standings";
@@ -808,6 +809,7 @@ document.addEventListener("click", (ev) => {
     const added = !favs.has(id);
     added ? favs.add(id) : favs.delete(id);
     store.set("favs", [...favs]); render();
+    if (alertMode !== "off") syncPush();
     favToast(id, added);
   } else if (t.dataset.goto) {
     ev.preventDefault();
@@ -886,8 +888,57 @@ $("#bell").addEventListener("click", () => {
   paintBell();
   if (alertMode !== "off") {
     ensureAudio(); bell();
-    if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
   }
+  // El permiso se pide en el mismo toque (algunos navegadores lo exigen)
+  if (alertMode !== "off" && "Notification" in window && Notification.permission === "default") Notification.requestPermission().then(() => syncPush()).catch(() => {});
+  else syncPush();
+});
+
+// ---------- Notificaciones push (goles con la pantalla apagada) ----------
+const pushOK = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const b64ToBytes = (s) => { const b = atob((s + "===".slice((s.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, (c) => c.charCodeAt(0)); };
+const postJSON = (path, body) => fetch(PUSH_API + path, { method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify(body) }).then((r) => r.json());
+async function syncPush(fromClick = false) {
+  if (!pushOK) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (alertMode === "off") {
+      if (sub) { await postJSON("/baja", { endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); }
+      paintPush(); return;
+    }
+    if (Notification.permission === "default" && fromClick) await Notification.requestPermission();
+    if (Notification.permission !== "granted") { paintPush(); return; }
+    if (!sub) {
+      const { key } = await (await fetch(PUSH_API + "/clave")).json();
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+    }
+    await postJSON("/suscribir", { sub: sub.toJSON(), mode: alertMode, favs: [...favs] });
+  } catch (e) { console.warn("push", e); }
+  paintPush();
+}
+async function paintPush() {
+  const el = $("#push-info"), btn = $("#probar-push");
+  if (!el) return;
+  let txt = "", show = false;
+  if (!pushOK) txt = "Este navegador no permite avisos con la pantalla apagada" + (/iPhone|iPad/.test(navigator.userAgent) ? " (en iPhone, agregá la app a inicio)." : ".");
+  else if (alertMode === "off") txt = "📳 Activá 🔔 Goles arriba para recibir avisos aunque tengas la pantalla apagada.";
+  else if (Notification.permission === "denied") txt = "📳 Las notificaciones están bloqueadas. Habilitalas en los permisos del sitio para recibir goles con la pantalla apagada.";
+  else if (Notification.permission === "granted") {
+    const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+    if (sub) { txt = `📳 Avisos de gol con pantalla apagada: <b>activados</b> (${alertMode === "favs" ? "solo favoritos" : "todos los partidos"}).`; show = true; }
+  } else txt = "📳 Tocá 🔔 Goles para permitir avisos con la pantalla apagada.";
+  el.innerHTML = txt; btn.hidden = !show;
+}
+$("#probar-push").addEventListener("click", async () => {
+  const btn = $("#probar-push");
+  btn.disabled = true; btn.textContent = "Enviando…";
+  try {
+    const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+    const r = await postJSON("/prueba", { endpoint: sub.endpoint });
+    btn.textContent = r.ok ? "✅ Enviada: apagá la pantalla y mirá" : "No se pudo enviar";
+  } catch { btn.textContent = "No se pudo enviar"; }
+  setTimeout(() => { btn.disabled = false; btn.textContent = "📳 Probar notificación"; }, 6000);
 });
 // Los navegadores sólo permiten sonido después de un toque del usuario
 ["click", "touchstart", "keydown"].forEach((t) => document.addEventListener(t, () => alertMode !== "off" && ensureAudio(), { passive: true }));
@@ -1001,6 +1052,7 @@ if (!standalone && isIOS) {
 // ---------- Inicio ----------
 (async function init() {
   paintBell();
+  syncPush();
   await Promise.all([loadFixture().catch((e) => console.warn(e)), loadStandings()]);
   lastFixture = lastStandings = Date.now();
   S.ready = true;

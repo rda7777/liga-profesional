@@ -1,5 +1,5 @@
 // Service worker: permite instalar la app y abrirla sin conexión con los últimos datos guardados.
-const VERSION = "v16";
+const VERSION = "v17";
 const SHELL = `shell-${VERSION}`, DATA = "data", LOGOS = "logos";
 const FILES = [
   "./", "./index.html", "./manifest.webmanifest",
@@ -53,4 +53,34 @@ self.addEventListener("fetch", (e) => {
 
   // Archivos del sitio: caché primero
   e.respondWith(caches.match(req).then((hit) => hit || fetch(req)));
+});
+
+// ---------- Notificaciones de gol (llegan aunque la pantalla esté apagada) ----------
+const PUSH_API = "https://liga-goles.ricardoaufranc.workers.dev";
+self.addEventListener("push", (e) => {
+  e.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    if (wins.some((w) => w.visibilityState === "visible")) return; // con la app a la vista ya suena la campanita
+    let goles = [];
+    try {
+      const sub = await self.registration.pushManager.getSubscription();
+      goles = (await (await fetch(`${PUSH_API}/goles?ep=${encodeURIComponent(sub.endpoint)}`)).json()).goles || [];
+    } catch {}
+    if (!goles.length) return self.registration.showNotification("⚽ ¡Gol!", { body: "Abrí la app para ver el resultado.", tag: "gol", icon: "icons/icon-192.png", badge: "icons/icon-192.png", vibrate: [300, 100, 300] });
+    for (const g of goles) {
+      await self.registration.showNotification(g.title, {
+        body: g.body, tag: g.gid, icon: g.icon || "icons/icon-192.png", badge: "icons/icon-192.png",
+        vibrate: [300, 100, 300, 100, 500], requireInteraction: false, data: { url: "./#/" },
+      });
+    }
+  })());
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const w = wins.find((c) => c.url.includes("/liga-profesional/"));
+    if (w) return w.focus();
+    return self.clients.openWindow(e.notification.data?.url || "./");
+  })());
 });
