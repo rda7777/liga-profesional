@@ -260,3 +260,6 @@ body.app .top { padding-top: env(safe-area-inset-top); }
 .fav-toast { background: var(--brand); }
 .fav-toast b { color: #fff; }
 .fav-toast u { text-decoration: none; font-weight: 700; }
+
+.dz { margin-left: 5px; font-size: 14px; line-height: 1; }
+.t tr.down td .dz { filter: none; }

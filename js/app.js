@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=14";
-import { compactEvent } from "./compact.js?v=14";
-import { confetti, fiestaSound } from "./fiesta.js?v=14";
-import { buildFacts } from "./datos.js?v=14";
-import { computeTables } from "./tables.js?v=14";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=15";
+import { compactEvent } from "./compact.js?v=15";
+import { confetti, fiestaSound } from "./fiesta.js?v=15";
+import { buildFacts } from "./datos.js?v=15";
+import { computeTables } from "./tables.js?v=15";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -250,9 +250,21 @@ function matchesByDay(list, tagFn) {
   return html || `<p class="empty">Sin partidos.</p>`;
 }
 
-function teamCell(id) {
+// 💀 = zona de descenso · 👻 = cerca del descenso (los 3 puestos de arriba; 2 en la Nacional)
+const NEAR_LP = 3, NEAR_PN = 2;
+function dangerMarks(list, relIds, near) {
+  const marks = {};
+  const rel = new Set(relIds.filter(Boolean));
+  list.forEach((r) => { if (rel.has(r.id)) marks[r.id] = "💀"; });
+  const top = list.findIndex((r) => rel.has(r.id));
+  if (top > 0) for (let i = top - 1, k = 0; i >= 0 && k < near; i--) if (!rel.has(list[i].id)) { marks[list[i].id] = "👻"; k++; }
+  return marks;
+}
+const dzIcon = (m) => m ? `<span class="dz" title="${m === "💀" ? "Zona de descenso" : "Cerca del descenso"}">${m}</span>` : "";
+
+function teamCell(id, mark = "") {
   const lv = liveTeam(id);
-  return `<td class="tm"><a href="#/club/${id}">${img(id, "tlogo")}<span>${esc(teamName(id))}</span>${lv ? `<span class="livebadge">${lv.h[1] ?? 0}-${lv.a[1] ?? 0}</span>` : ""}</a></td>`;
+  return `<td class="tm"><a href="#/club/${id}">${img(id, "tlogo")}<span>${esc(teamName(id))}</span>${dzIcon(mark)}${lv ? `<span class="livebadge">${lv.h[1] ?? 0}-${lv.a[1] ?? 0}</span>` : ""}</a></td>`;
 }
 
 function zoneTable(rows, title, sub) {
@@ -303,25 +315,27 @@ function viewPosiciones() {
 function viewAnual() {
   const an = annual();
   if (!an.length) return `<p class="loading">Cargando…</p>`;
-  const { byAnual } = relegated();
+  const { byAnual, byProm } = relegated();
+  const dm = dangerMarks(an, [byAnual, byProm], NEAR_LP);
   const body = an.map((r, i) => `<tr class="${i < 3 ? "lib" : ""}${r.id === byAnual ? " down" : ""}${favs.has(r.id) ? " me" : ""}">
-    <td class="pos">${i + 1}</td>${teamCell(r.id)}<td class="pts">${r.pts}</td><td>${r.pj}</td>
+    <td class="pos">${i + 1}</td>${teamCell(r.id, dm[r.id])}<td class="pts">${r.pts}</td><td>${r.pj}</td>
     <td class="hide-s">${r.g}</td><td class="hide-s">${r.e}</td><td class="hide-s">${r.p}</td><td class="hide-s">${r.gf}</td><td class="hide-s">${r.gc}</td><td>${r.gf - r.gc > 0 ? "+" : ""}${r.gf - r.gc}</td></tr>`).join("");
   return `<div class="card"><h2>Tabla anual 2026<small>Apertura + Clausura (fase regular)</small></h2>
     <table class="t"><thead><tr><th>#</th><th style="text-align:left">Equipo</th><th>Pts</th><th>PJ</th><th class="hide-s">G</th><th class="hide-s">E</th><th class="hide-s">P</th><th class="hide-s">GF</th><th class="hide-s">GC</th><th>DG</th></tr></thead><tbody>${body}</tbody></table>
-    <div class="legend"><span><i style="background:var(--lib)"></i>Copa Libertadores (3 mejores; si ya clasificaron por título, el cupo pasa al siguiente)</span><span><i style="background:var(--down)"></i>Desciende por tabla anual</span></div></div>`;
+    <div class="legend"><span><i style="background:var(--lib)"></i>Copa Libertadores (3 mejores; si ya clasificaron por título, el cupo pasa al siguiente)</span><span><i style="background:var(--down)"></i>Desciende por tabla anual</span><span>💀 Zona de descenso</span><span>👻 Cerca del descenso</span></div></div>`;
 }
 
 function viewPromedios() {
   const pr = promedios(annual());
   if (!pr.length) return `<p class="loading">Cargando…</p>`;
-  const { byProm } = relegated();
+  const { byProm, byAnual } = relegated();
+  const dm = dangerMarks(pr, [byProm, byAnual], NEAR_LP);
   const body = pr.map((r, i) => `<tr class="${r.id === byProm ? "down" : ""}${favs.has(r.id) ? " me" : ""}">
-    <td class="pos">${i + 1}</td>${teamCell(r.id)}<td class="pts">${r.prom.toFixed(3).replace(".", ",")}</td><td>${r.pts}</td><td>${r.pj}</td>
+    <td class="pos">${i + 1}</td>${teamCell(r.id, dm[r.id])}<td class="pts">${r.prom.toFixed(3).replace(".", ",")}</td><td>${r.pts}</td><td>${r.pj}</td>
     <td class="hide-s">${r.base}</td><td class="hide-s">${r.y26}</td></tr>`).join("");
   return `<div class="card"><h2>Promedios<small>2024 + 2025 + 2026</small></h2>
     <table class="t"><thead><tr><th>#</th><th style="text-align:left">Equipo</th><th>Prom.</th><th>Pts</th><th>PJ</th><th class="hide-s">24-25</th><th class="hide-s">2026</th></tr></thead><tbody>${body}</tbody></table>
-    <div class="legend"><span><i style="background:var(--down)"></i>Desciende por promedios. Si el mismo club es último en ambas tablas, el segundo descenso es para el anteúltimo de la anual.</span></div></div>`;
+    <div class="legend"><span><i style="background:var(--down)"></i>Desciende por promedios. Si el mismo club es último en ambas tablas, el segundo descenso es para el anteúltimo de la anual.</span><span>💀 Zona de descenso</span><span>👻 Cerca del descenso</span></div></div>`;
 }
 
 function bracketMatch(e) {
@@ -573,14 +587,16 @@ function simResults() {
   let head, rows;
   if (tab === "promedios") {
     head = `<th>#</th><th style="text-align:left">Equipo</th><th>Prom.</th><th>Pts</th><th>PJ</th>`;
-    rows = mine.promedios.map((r, i) => `<tr class="${r.id === mine.rel.byProm ? "down" : ""}"><td class="pos">${i + 1}</td>${teamCell(r.id)}<td class="pts">${r.prom.toFixed(3).replace(".", ",")}</td><td>${r.pts}</td><td>${r.pj}</td><td class="dl">${delta(real.promedios, r.id, i + 1)}</td></tr>`);
+    const dm = dangerMarks(mine.promedios, [mine.rel.byProm, mine.rel.byAnual], NEAR_LP);
+    rows = mine.promedios.map((r, i) => `<tr class="${r.id === mine.rel.byProm ? "down" : ""}"><td class="pos">${i + 1}</td>${teamCell(r.id, dm[r.id])}<td class="pts">${r.prom.toFixed(3).replace(".", ",")}</td><td>${r.pts}</td><td>${r.pj}</td><td class="dl">${delta(real.promedios, r.id, i + 1)}</td></tr>`);
   } else {
     const list = tab === "anual" ? mine.anual : mine.zones[t][tab];
     const realList = tab === "anual" ? real.anual : real.zones[t][tab];
     head = `<th>#</th><th style="text-align:left">Equipo</th><th>Pts</th><th>PJ</th><th>DG</th>`;
     rows = list.map((r, i) => {
       const cls = tab === "anual" ? (i < 3 ? "lib" : "") + (r.id === mine.rel.byAnual ? " down" : "") : i < 8 ? "q" : "";
-      return `<tr class="${cls}"><td class="pos">${i + 1}</td>${teamCell(r.id)}<td class="pts">${r.pts}</td><td>${r.pj}</td><td>${r.gf - r.gc > 0 ? "+" : ""}${r.gf - r.gc}</td><td class="dl">${delta(realList, r.id, i + 1)}</td></tr>`;
+      const dm = tab === "anual" ? dangerMarks(list, [mine.rel.byAnual, mine.rel.byProm], NEAR_LP) : {};
+      return `<tr class="${cls}"><td class="pos">${i + 1}</td>${teamCell(r.id, dm[r.id])}<td class="pts">${r.pts}</td><td>${r.pj}</td><td>${r.gf - r.gc > 0 ? "+" : ""}${r.gf - r.gc}</td><td class="dl">${delta(realList, r.id, i + 1)}</td></tr>`;
     });
   }
   const changed = Object.keys(sim).length;
@@ -664,8 +680,9 @@ function viewNPartidos() {
 function nZoneTable(rows, z) {
   if (!rows) return "";
   const n = rows.length;
+  const dm = dangerMarks(rows, rows.slice(-2).map((r) => r.id), NEAR_PN);
   const body = rows.map((r, i) => `<tr class="${i === 0 ? "fin" : i <= 7 ? "q" : ""}${i >= n - 2 ? " down" : ""}${favs.has(r.id) ? " me" : ""}">
-    <td class="pos">${i + 1}</td>${teamCell(r.id)}<td class="pts">${r.pts}</td><td>${r.pj}</td>
+    <td class="pos">${i + 1}</td>${teamCell(r.id, dm[r.id])}<td class="pts">${r.pts}</td><td>${r.pj}</td>
     <td class="hide-s">${r.g}</td><td class="hide-s">${r.e}</td><td class="hide-s">${r.p}</td>
     <td class="hide-s">${r.gf}</td><td class="hide-s">${r.gc}</td><td>${r.gf - r.gc > 0 ? "+" : ""}${r.gf - r.gc}</td></tr>`).join("");
   return `<div class="card"><h2>Zona ${z}<small>Primera Nacional</small></h2><table class="t"><thead><tr><th>#</th><th style="text-align:left">Equipo</th><th>Pts</th><th>PJ</th><th class="hide-s">G</th><th class="hide-s">E</th><th class="hide-s">P</th><th class="hide-s">GF</th><th class="hide-s">GC</th><th>DG</th></tr></thead><tbody>${body}</tbody></table></div>`;
@@ -674,7 +691,7 @@ function viewNZonas() {
   const z = S.standings.N;
   if (!z) return `<p class="loading">Cargando posiciones…</p>`;
   return `<div class="grid2">${nZoneTable(z.A, "A")}${nZoneTable(z.B, "B")}</div>
-    <div class="legend"><span><i style="background:#f5b301"></i>Final por el primer ascenso</span><span><i style="background:var(--accent)"></i>Reducido (2° al 8°)</span><span><i style="background:var(--down)"></i>Descienden (últimos 2 de cada zona)</span></div>`;
+    <div class="legend"><span><i style="background:#f5b301"></i>Final por el primer ascenso</span><span><i style="background:var(--accent)"></i>Reducido (2° al 8°)</span><span><i style="background:var(--down)"></i>Descienden (últimos 2 de cada zona)</span><span>💀 Zona de descenso</span><span>👻 Cerca del descenso</span></div>`;
 }
 
 function viewNAscenso() {
