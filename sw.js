@@ -1,5 +1,5 @@
 // Service worker: permite instalar la app y abrirla sin conexión con los últimos datos guardados.
-const VERSION = "v17";
+const VERSION = "v18";
 const SHELL = `shell-${VERSION}`, DATA = "data", LOGOS = "logos";
 const FILES = [
   "./", "./index.html", "./manifest.webmanifest",
@@ -59,13 +59,17 @@ self.addEventListener("fetch", (e) => {
 const PUSH_API = "https://liga-goles.ricardoaufranc.workers.dev";
 self.addEventListener("push", (e) => {
   e.waitUntil((async () => {
-    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    if (wins.some((w) => w.visibilityState === "visible")) return; // con la app a la vista ya suena la campanita
     let goles = [];
     try {
       const sub = await self.registration.pushManager.getSubscription();
       goles = (await (await fetch(`${PUSH_API}/goles?ep=${encodeURIComponent(sub.endpoint)}`)).json()).goles || [];
     } catch {}
+    // Con la app a la vista ya suena la campanita: sólo se muestra la notificación de prueba
+    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    if (wins.some((w) => w.visibilityState === "visible")) {
+      goles = goles.filter((g) => String(g.gid).startsWith("prueba"));
+      if (!goles.length) return;
+    }
     if (!goles.length) return self.registration.showNotification("⚽ ¡Gol!", { body: "Abrí la app para ver el resultado.", tag: "gol", icon: "icons/icon-192.png", badge: "icons/icon-192.png", vibrate: [300, 100, 300] });
     for (const g of goles) {
       await self.registration.showNotification(g.title, {
