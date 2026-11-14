@@ -8,8 +8,8 @@
   "id": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0b3d2e",
-  "theme_color": "#0b3d2e",
+  "background_color": "#c8102e",
+  "theme_color": "#c8102e",
   "categories": ["sports", "news"],
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

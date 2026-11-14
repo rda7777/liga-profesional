@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=9";
-import { compactEvent } from "./compact.js?v=9";
-import { confetti, fiestaSound } from "./fiesta.js?v=9";
-import { buildFacts } from "./datos.js?v=9";
-import { computeTables } from "./tables.js?v=9";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=10";
+import { compactEvent } from "./compact.js?v=10";
+import { confetti, fiestaSound } from "./fiesta.js?v=10";
+import { buildFacts } from "./datos.js?v=10";
+import { computeTables } from "./tables.js?v=10";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -474,7 +474,7 @@ async function keepAwake(on) {
 setInterval(() => { const c = $("#tvclock"); if (c) c.textContent = fHour.format(new Date()); }, 15000);
 
 function tvGoal(e, side, who) {
-  const col = TEAMS[side[0]]?.col || ["#0b3d2e", "#fff"];
+  const col = TEAMS[side[0]]?.col || ["#c8102e", "#fff"];
   const o = document.createElement("div");
   o.className = "tvgoal";
   o.style.background = `radial-gradient(circle at 50% 40%, ${col[0]}, #000 85%)`;

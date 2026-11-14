@@ -1,6 +1,6 @@
 // Festejo de gol: confeti con los colores del club y un sonido sintetizado (original, sin grabaciones).
 
-export function confetti(colors = ["#10b26c", "#ffffff"], ms = 4000) {
+export function confetti(colors = ["#c8102e", "#ffffff"], ms = 4000) {
   if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
   const cv = document.createElement("canvas");
   cv.className = "confetti";
