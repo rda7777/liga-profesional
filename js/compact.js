@@ -4,12 +4,20 @@ const ROUND = {
   "round-of-16": "r16", "quarterfinals": "qf", "semifinals": "sf", "final": "f",
 };
 
-export function compactEvent(e) {
+// Primera Nacional (arg.2): fase regular, Reducido y final por el primer ascenso
+const ROUND_PN = [["championship-final", "fa"], ["first-round", "p1"], ["quarterfinals", "qf"], ["semifinals", "sf"], ["finals", "f"]];
+
+export function compactEvent(e, lg = "lp") {
   const c = e.competitions?.[0] || {};
   const slug = e.season?.slug || "";
-  const t = slug.includes("apertura") ? "A" : slug.includes("clausura") ? "C" : "?";
-  let r = "reg";
-  for (const [k, v] of Object.entries(ROUND)) if (slug.endsWith(k)) r = v;
+  let t, r = "reg";
+  if (lg === "pn") {
+    t = "N";
+    for (const [k, v] of ROUND_PN) if (slug.endsWith(k)) { r = v; break; }
+  } else {
+    t = slug.includes("apertura") ? "A" : slug.includes("clausura") ? "C" : "?";
+    for (const [k, v] of Object.entries(ROUND)) if (slug.endsWith(k)) r = v;
+  }
   const side = (ha) => {
     const x = (c.competitors || []).find((k) => k.homeAway === ha) || {};
     return [String(x.team?.id || ""), x.score != null ? Number(x.score) : null,

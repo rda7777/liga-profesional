@@ -1,27 +1,29 @@
-import { TEAMS, logo, teamName } from "./teams.js?v=8";
-import { compactEvent } from "./compact.js?v=8";
-import { confetti, fiestaSound } from "./fiesta.js?v=8";
-import { buildFacts } from "./datos.js?v=8";
-import { computeTables } from "./tables.js?v=8";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=9";
+import { compactEvent } from "./compact.js?v=9";
+import { confetti, fiestaSound } from "./fiesta.js?v=9";
+import { buildFacts } from "./datos.js?v=9";
+import { computeTables } from "./tables.js?v=9";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
 const ESPN_SB = "https://site.api.espn.com/apis/site/v2/sports/soccer/arg.1/scoreboard";
 const ESPN_ST = "https://site.api.espn.com/apis/v2/sports/soccer/arg.1/standings";
 const SEASONTYPE = { A: 1, C: 6 };
+const ESPN_SB2 = "https://site.api.espn.com/apis/site/v2/sports/soccer/arg.2/scoreboard";
+const ESPN_ST2 = "https://site.api.espn.com/apis/v2/sports/soccer/arg.2/standings";
 const TZ = "America/Argentina/Buenos_Aires";
 const LIVE_MS = 12000, IDLE_MS = 60000, STANDINGS_MS = 5 * 60000, FIXTURE_MS = 15 * 60000;
 
 // ---------- Estado ----------
 const S = {
   events: new Map(),
-  standings: { A: null, C: null },
+  standings: { A: null, C: null, N: null },
   news: null,
   videos: {},
   ready: false,
   open: new Set(),
   flash: new Set(),
-  sel: { torneo: null, round: null, tTabla: null, tPlay: null, newsClub: "", fact: 0, simT: null, simR: null, simTab: "promedios" },
+  sel: { torneo: null, round: null, tTabla: null, tPlay: null, newsClub: "", fact: 0, simT: null, simR: null, simTab: "promedios", nRound: null, nNews: "" },
 };
 
 const store = {
@@ -75,7 +77,18 @@ async function loadFixture() {
     const res = await Promise.allSettled(months.map((m) => getJSON(`${ESPN_SB}?dates=${m}&limit=500`)));
     res.forEach((r) => r.status === "fulfilled" && r.value.events?.forEach((e) => data.events.push(compactEvent(e))));
   }
-  for (const ev of data.events) {
+  let nac = null;
+  for (const base of ["data/", REPO_RAW]) {
+    try { nac = await getJSON(base + "nacional.json?t=" + Date.now()); break; } catch {}
+  }
+  if (!nac) {
+    const year = new Date().getFullYear();
+    nac = { events: [] };
+    const months = Array.from({ length: 12 }, (_, i) => `${year}${String(i + 1).padStart(2, "0")}`);
+    const res = await Promise.allSettled(months.map((m) => getJSON(`${ESPN_SB2}?dates=${m}&limit=500`)));
+    res.forEach((r) => r.status === "fulfilled" && r.value.events?.forEach((e) => nac.events.push(compactEvent(e, "pn"))));
+  }
+  for (const ev of [...data.events, ...nac.events]) {
     const cur = S.events.get(ev.id);
     // No pisar datos en vivo más nuevos con el fixture
     if (!cur || cur.st === "pre" || ev.st === "post") S.events.set(ev.id, ev);
@@ -83,7 +96,7 @@ async function loadFixture() {
 }
 
 async function loadStandings() {
-  await Promise.all(Object.entries(SEASONTYPE).map(async ([t, st]) => {
+  await Promise.all([...Object.entries(SEASONTYPE).map(async ([t, st]) => {
     try {
       const d = await getJSON(`${ESPN_ST}?seasontype=${st}`);
       const zones = {};
@@ -96,7 +109,23 @@ async function loadStandings() {
       }
       if (Object.keys(zones).length) S.standings[t] = zones;
     } catch (e) { console.warn("standings", t, e); }
-  }));
+  }), loadStandingsN()]);
+}
+async function loadStandingsN() {
+  try {
+    const d = await getJSON(ESPN_ST2);
+    const zones = {};
+    for (const c of d.children || []) {
+      const z = (c.name || "").slice(-1);
+      zones[z] = (c.standings?.entries || []).map((e) => {
+        NAMES[String(e.team.id)] = (e.team.shortDisplayName || e.team.displayName || "").trim();
+        NAMES["full" + e.team.id] = e.team.displayName;
+        const s = Object.fromEntries(e.stats.map((x) => [x.name, x.value]));
+        return { id: String(e.team.id), rank: s.rank, pj: s.gamesPlayed, g: s.wins, e: s.ties, p: s.losses, gf: s.pointsFor, gc: s.pointsAgainst, pts: s.points };
+      }).sort((a, b) => a.rank - b.rank);
+    }
+    if (Object.keys(zones).length) S.standings.N = zones;
+  } catch (e) { console.warn("standings N", e); }
 }
 
 async function loadVideos() {
@@ -105,7 +134,12 @@ async function loadVideos() {
   }
 }
 function videoLink(e, cls = "vid") {
-  if (e.st !== "post" || !(e.t === "A" || e.t === "C")) return "";
+  if (e.st !== "post") return "";
+  if (e.t === "N") {
+    const q = encodeURIComponent(`${nameOf(e.h)} ${nameOf(e.a)} resumen Primera Nacional`);
+    return `<a class="${cls} srch" href="https://www.youtube.com/results?search_query=${q}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Buscar el resumen en YouTube">▶ Buscar</a>`;
+  }
+  if (!(e.t === "A" || e.t === "C")) return "";
   const id = S.videos[e.id];
   if (id) return `<a class="${cls}" href="https://www.youtube.com/watch?v=${encodeURIComponent(id)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Resumen en el canal oficial de la Liga">▶ Goles</a>`;
   const q = encodeURIComponent(`${nameOf(e.h)} ${nameOf(e.a)} resumen`);
@@ -377,8 +411,20 @@ function viewNoticias() {
 // ---------- Render ----------
 function route() {
   const h = location.hash.replace(/^#\/?/, "");
-  const [r, arg] = h.split("/");
-  return { r: r || "partidos", arg };
+  const [r, arg, arg2] = h.split("/");
+  if (r === "nacional") return { lg: "pn", r: "n-" + (arg || "partidos"), arg: arg2 };
+  if (r === "club" && arg && !TEAMS[arg]) return { lg: "pn", r: "club", arg };
+  return { lg: "lp", r: r || "partidos", arg };
+}
+const NAV = {
+  lp: [["#/", "partidos", "Partidos"], ["#/posiciones", "posiciones", "Zonas"], ["#/anual", "anual", "Anual"], ["#/promedios", "promedios", "Promedios"], ["#/playoffs", "playoffs", "Playoffs"], ["#/clubes", "clubes", "Clubes"], ["#/noticias", "noticias", "Noticias"], ["#/simulador", "simulador", "¿Y si…?"], ["#/tv", "tv", "📺 Pantalla grande"]],
+  pn: [["#/nacional", "n-partidos", "Partidos"], ["#/nacional/zonas", "n-zonas", "Zonas"], ["#/nacional/ascenso", "n-ascenso", "Ascenso"], ["#/nacional/clubes", "n-clubes", "Clubes"], ["#/nacional/noticias", "n-noticias", "Noticias"], ["#/tv", "tv", "📺 Pantalla grande"]],
+};
+function paintNav(lg, r) {
+  const tabs = $("#tabs");
+  if (tabs.dataset.lg !== lg) { tabs.dataset.lg = lg; tabs.innerHTML = NAV[lg].map(([h, k, l]) => `<a href="${h}" data-r="${k}">${l}</a>`).join(""); }
+  tabs.querySelectorAll("a").forEach((a) => a.classList.toggle("act", a.dataset.r === r || (r === "club" && /clubes$/.test(a.dataset.r))));
+  document.querySelectorAll("#leagues a").forEach((a) => a.classList.toggle("act", a.dataset.lg === lg));
 }
 
 // ---------- Dato del día ----------
@@ -400,7 +446,7 @@ function factCard() {
 function tvCard(e) {
   const last = e.g.at(-1);
   return `<div class="tvm ${e.st}">
-    <div class="tvs">${statusLabel(e)}</div>
+    <div class="tvs">${statusLabel(e)}${e.t === "N" ? ` · <span class="tvlg">Primera Nacional</span>` : ""}</div>
     <div class="tvt th">${img(e.h[0])}<span>${esc(nameOf(e.h))}</span></div>
     <div class="tvsc">${e.st === "pre" ? (e.tbd ? "–" : fHour.format(new Date(e.d))) : `${e.h[1] ?? 0}<i>-</i>${e.a[1] ?? 0}`}${e.h[2] != null ? `<small>(${e.h[2]}-${e.a[2]} pen)</small>` : ""}</div>
     <div class="tvt ta">${img(e.a[0])}<span>${esc(nameOf(e.a))}</span></div>
@@ -413,7 +459,7 @@ function viewTV() {
   const next = all.filter((e) => e.st === "pre" && e.sn !== "STATUS_POSTPONED").slice(0, 8);
   const last = all.filter((e) => e.st === "post").slice(-8).reverse();
   const sec = (t, list) => list.length ? `<h2 class="tvh">${t}</h2><div class="tvgrid">${list.map(tvCard).join("")}</div>` : "";
-  return `<div class="tvbar"><b>⚽ Liga Profesional</b><span id="tvclock">${fHour.format(new Date())}</span>
+  return `<div class="tvbar"><b>⚽ Fútbol argentino</b><span id="tvclock">${fHour.format(new Date())}</span>
       <span class="tvbtns"><button data-fs>⛶ Pantalla completa</button><a href="#/">✕ Salir</a></span></div>
     ${live.length ? sec("🔴 En vivo", live) : `<p class="tvnone">No hay partidos en juego ahora. Cuando empiecen aparecen acá solos.</p>`}
     ${sec("Próximos", next)}${live.length ? "" : sec("Últimos resultados", last)}`;
@@ -507,17 +553,139 @@ function viewSimulador() {
     </div>`;
 }
 
+// ---------- Primera Nacional ----------
+const NROUND = { fa: "Final 1er ascenso", p1: "Reducido · 1ª fase", qf: "Reducido · cuartos", sf: "Reducido · semis", f: "Reducido · final" };
+const NORDER = ["fa", "p1", "qf", "sf", "f"];
+function zoneOfN(id) {
+  for (const [z, rows] of Object.entries(S.standings.N || {})) if (rows.some((r) => r.id === id)) return z;
+  return null;
+}
+function nEvents() { return [...S.events.values()].filter((e) => e.t === "N"); }
+function nRoundKey(e, idx) { return e.r === "reg" ? "F" + idx[e.id] : e.r; }
+function nLabel(k) { return k[0] === "F" ? "Fecha " + k.slice(1) : NROUND[k] || k; }
+
+function viewNPartidos() {
+  const evs = nEvents();
+  if (!evs.length) return `<p class="loading">Cargando Primera Nacional…</p>`;
+  const idx = roundsInfo("N");
+  const keys = [...new Set(evs.map((e) => nRoundKey(e, idx)))].filter((k) => k !== "Fundefined")
+    .sort((a, b) => (a[0] === "F" ? +a.slice(1) : 100 + NORDER.indexOf(a)) - (b[0] === "F" ? +b.slice(1) : 100 + NORDER.indexOf(b)));
+  let round = S.sel.nRound && keys.includes(S.sel.nRound) ? S.sel.nRound : null;
+  if (!round) {
+    const sorted = [...evs].sort((a, b) => a.d.localeCompare(b.d));
+    const pick = sorted.find((e) => e.st === "in") || sorted.find((e) => e.st === "pre" && e.sn !== "STATUS_POSTPONED") || sorted.at(-1);
+    round = pick ? nRoundKey(pick, idx) : keys[0];
+  }
+  const liveR = new Set(evs.filter((e) => e.st === "in").map((e) => nRoundKey(e, idx)));
+  const list = evs.filter((e) => nRoundKey(e, idx) === round).sort((a, b) => a.d.localeCompare(b.d) || nameOf(a.h).localeCompare(nameOf(b.h)));
+  const zTag = (e) => {
+    if (e.r !== "reg") return "";
+    const zh = zoneOfN(e.h[0]), za = zoneOfN(e.a[0]);
+    return zh && zh === za ? "Zona " + zh : "Interzonal";
+  };
+  return `<div class="chips">${keys.map((k) => `<button class="chip${k === round ? " act" : ""}${liveR.has(k) ? " live" : ""}" data-nround="${k}">${nLabel(k)}</button>`).join("")}</div>
+    <div class="card"><h2>Primera Nacional · ${nLabel(round)}<small>Tocá un partido para ver el estadio</small></h2>${matchesByDay(list, zTag)}</div>`;
+}
+
+function nZoneTable(rows, z) {
+  if (!rows) return "";
+  const n = rows.length;
+  const body = rows.map((r, i) => `<tr class="${i === 0 ? "fin" : i <= 7 ? "q" : ""}${i >= n - 2 ? " down" : ""}${favs.has(r.id) ? " me" : ""}">
+    <td class="pos">${i + 1}</td>${teamCell(r.id)}<td class="pts">${r.pts}</td><td>${r.pj}</td>
+    <td class="hide-s">${r.g}</td><td class="hide-s">${r.e}</td><td class="hide-s">${r.p}</td>
+    <td class="hide-s">${r.gf}</td><td class="hide-s">${r.gc}</td><td>${r.gf - r.gc > 0 ? "+" : ""}${r.gf - r.gc}</td></tr>`).join("");
+  return `<div class="card"><h2>Zona ${z}<small>Primera Nacional</small></h2><table class="t"><thead><tr><th>#</th><th style="text-align:left">Equipo</th><th>Pts</th><th>PJ</th><th class="hide-s">G</th><th class="hide-s">E</th><th class="hide-s">P</th><th class="hide-s">GF</th><th class="hide-s">GC</th><th>DG</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function viewNZonas() {
+  const z = S.standings.N;
+  if (!z) return `<p class="loading">Cargando posiciones…</p>`;
+  return `<div class="grid2">${nZoneTable(z.A, "A")}${nZoneTable(z.B, "B")}</div>
+    <div class="legend"><span><i style="background:#f5b301"></i>Final por el primer ascenso</span><span><i style="background:var(--accent)"></i>Reducido (2° al 8°)</span><span><i style="background:var(--down)"></i>Descienden (últimos 2 de cada zona)</span></div>`;
+}
+
+function viewNAscenso() {
+  const evs = nEvents().filter((e) => e.r !== "reg").sort((a, b) => a.d.localeCompare(b.d) || a.id.localeCompare(b.id));
+  const fin = evs.filter((e) => e.r === "fa");
+  const winner = (e) => e?.st === "post" ? (e.h[3] ? e.h : e.a[3] ? e.a : null) : null;
+  const finW = winner(fin.at(-1));
+  const need = { p1: 7, qf: 4, sf: 2, f: 1 };
+  const cols = ["p1", "qf", "sf", "f"].map((r) => {
+    const list = evs.filter((e) => e.r === r);
+    const items = Array.from({ length: Math.max(need[r], list.length) }, (_, i) => bracketMatch(list[i]));
+    return `<div class="bcol"><h3>${{ p1: "1ª fase", qf: "Cuartos", sf: "Semis", f: "Final" }[r]}</h3>${items.join("")}</div>`;
+  }).join("");
+  const redW = winner(evs.filter((e) => e.r === "f").at(-1));
+  return `<div class="card"><h2>Final por el primer ascenso<small>1° Zona A vs 1° Zona B</small></h2>
+      ${finW ? `<div class="champ">${img(finW[0])}🏆 <b>${esc(nameOf(finW))}</b> campeón y ascendido a Primera</div>` : ""}
+      ${fin.length ? matchesByDay(fin) : `<p class="empty">Todavía no está programada.</p>`}</div>
+    <div class="card"><h2>Reducido por el segundo ascenso<small>El perdedor de la final entra en cuartos</small></h2>
+      ${redW ? `<div class="champ">${img(redW[0])}⬆️ <b>${esc(nameOf(redW))}</b> ganó el Reducido y asciende</div>` : ""}
+      ${evs.some((e) => e.r !== "fa") ? `<div class="bracket">${cols}</div>` : `<p class="empty">El Reducido todavía no empezó.</p>`}</div>`;
+}
+
+function nTeams() {
+  const ids = Object.values(S.standings.N || {}).flat().map((r) => r.id);
+  return ids.sort((a, b) => teamName(a).localeCompare(teamName(b)));
+}
+function viewNClubes() {
+  const ids = nTeams();
+  if (!ids.length) return `<p class="loading">Cargando…</p>`;
+  return `<div class="card"><h2>Clubes de la Primera Nacional<small>⭐ = favoritos</small></h2><div class="clubs">${ids.map((id) =>
+    `<a href="#/club/${id}">${img(id)}${esc(teamName(id))}${favs.has(id) ? ' <span class="fav">★</span>' : ""}</a>`).join("")}</div></div>`;
+}
+function viewNNoticias() {
+  if (!S.news) return `<p class="loading">Cargando noticias…</p>`;
+  const club = S.sel.nNews;
+  const items = club ? (S.news.clubs?.[club] || []).map((n) => ({ ...n, club })) : (S.news.nacional || []);
+  const opts = nTeams().map((id) => `<option value="${id}"${id === club ? " selected" : ""}>${esc(teamName(id))}</option>`).join("");
+  return `<select class="sel" id="nNewsSel"><option value="">Primera Nacional (general)</option>${opts}</select>
+    <div class="card"><h2>Noticias<small>act. ${ago(S.news.updated)}</small></h2>${newsList([...items].sort((a, b) => b.date.localeCompare(a.date)), !!club)}</div>`;
+}
+function viewClubN(id) {
+  const z = zoneOfN(id);
+  const rows = S.standings.N?.[z] || [];
+  const pos = rows.findIndex((r) => r.id === id) + 1, row = rows[pos - 1];
+  const evs = nEvents().filter((e) => e.h[0] === id || e.a[0] === id).sort((a, b) => a.d.localeCompare(b.d));
+  if (!evs.length && !row) return `<p class="empty">Club no encontrado.</p>`;
+  const played = evs.filter((e) => e.st === "post");
+  const form = played.slice(-5).map((e) => {
+    const me = e.h[0] === id ? e.h : e.a, op = e.h[0] === id ? e.a : e.h;
+    const r = me[1] > op[1] ? "G" : me[1] < op[1] ? "P" : me[2] != null && op[2] != null ? (me[2] > op[2] ? "G" : "P") : "E";
+    return `<i class="${r}">${r}</i>`;
+  }).join("");
+  const status = !pos ? "" : pos === 1 ? "Final por el 1er ascenso" : pos <= 8 ? "Zona de Reducido" : pos >= rows.length - 1 ? "Zona de descenso" : "";
+  const tag = (e) => e.r === "reg" ? "Primera Nacional" : NROUND[e.r];
+  const nm = NAMES["full" + id] || teamName(id);
+  return `<div class="card"><div class="chead">${img(id)}<div><h1>${esc(nm)}</h1><div style="color:var(--muted);font-size:13px">Primera Nacional${z ? " · Zona " + z : ""}</div></div>
+      <button class="star${favs.has(id) ? " on" : ""}" data-fav="${id}">${favs.has(id) ? "★ Favorito" : "☆ Seguir"}</button></div>
+    <div class="stats">
+      <div class="stat${pos >= rows.length - 1 && pos ? " bad" : ""}"><b>${pos || "-"}°</b><span>Zona ${z || ""}${status ? " · " + status : ""}</span></div>
+      <div class="stat"><b>${row?.pts ?? "-"}</b><span>Puntos · ${row?.pj ?? "-"} PJ</span></div>
+      <div class="stat"><b>${row ? (row.gf - row.gc > 0 ? "+" : "") + (row.gf - row.gc) : "-"}</b><span>Diferencia de gol</span></div>
+      <div class="stat"><div class="form">${form || "-"}</div><span>Últimos 5</span></div>
+    </div></div>
+    <div class="grid2">
+      <div>
+        ${evs.some((e) => e.st !== "post") ? `<div class="card"><h2>Próximos / en juego</h2>${matchesByDay(evs.filter((e) => e.st !== "post"), tag)}</div>` : ""}
+        <div class="card"><h2>Últimos resultados</h2>${matchesByDay(played.slice(-8).reverse(), tag)}</div>
+      </div>
+      <div class="card"><h2>Noticias de ${esc(teamName(id))}</h2>${S.news ? newsList(S.news.clubs?.[id]) : `<p class="loading">Cargando…</p>`}</div>
+    </div>`;
+}
+
 function render(keepScroll = true) {
   const y = window.scrollY;
-  const { r, arg } = route();
-  document.querySelectorAll("#tabs a").forEach((a) => a.classList.toggle("act", a.dataset.r === r || (r === "club" && a.dataset.r === "clubes")));
+  const { r, arg, lg } = route();
+  if (r !== "tv") S.lg = lg;
+  paintNav(r === "tv" ? (S.lg || "lp") : lg, r);
   const v = $("#view");
   if (!S.ready) { v.innerHTML = `<p class="loading">Cargando…</p>`; return; }
-  const views = { partidos: viewPartidos, posiciones: viewPosiciones, anual: viewAnual, promedios: viewPromedios, playoffs: viewPlayoffs, clubes: viewClubes, noticias: viewNoticias, tv: viewTV, simulador: viewSimulador };
+  const views = { partidos: viewPartidos, posiciones: viewPosiciones, anual: viewAnual, promedios: viewPromedios, playoffs: viewPlayoffs, clubes: viewClubes, noticias: viewNoticias, tv: viewTV, simulador: viewSimulador,
+    "n-partidos": viewNPartidos, "n-zonas": viewNZonas, "n-ascenso": viewNAscenso, "n-clubes": viewNClubes, "n-noticias": viewNNoticias };
   document.body.classList.toggle("tv", r === "tv");
   keepAwake(r === "tv");
   if (r === "simulador" && document.activeElement?.dataset?.sim) return; // no pisar lo que se está escribiendo
-  v.innerHTML = r === "club" ? viewClub(arg) : (views[r] || viewPartidos)();
+  v.innerHTML = r === "club" ? (TEAMS[arg] ? viewClub(arg) : viewClubN(arg)) : (views[r] || viewPartidos)();
   renderLiveStrip();
   v.querySelector(".chip.act")?.scrollIntoView({ block: "nearest", inline: "center" });
   if (keepScroll) window.scrollTo(0, y);
@@ -530,8 +698,9 @@ function renderLiveStrip() {
 }
 
 document.addEventListener("click", (ev) => {
-  const t = ev.target.closest("[data-torneo],[data-round],[data-ttabla],[data-tplay],[data-fav],[data-goto],[data-nextfact],[data-fs],[data-simt],[data-simr],[data-simtab],[data-simreset],[data-simclear],.match");
+  const t = ev.target.closest("[data-nround],[data-torneo],[data-round],[data-ttabla],[data-tplay],[data-fav],[data-goto],[data-nextfact],[data-fs],[data-simt],[data-simr],[data-simtab],[data-simreset],[data-simclear],.match");
   if (!t) return;
+  if (t.dataset.nround) { S.sel.nRound = t.dataset.nround; render(); return; }
   if (t.dataset.nextfact !== undefined) { S.sel.fact++; render(); }
   else if (t.dataset.fs !== undefined) { const d = document.documentElement; document.fullscreenElement ? document.exitFullscreen() : d.requestFullscreen?.().catch(() => {}); ensureAudio(); }
   else if (t.dataset.simt) { S.sel.simT = t.dataset.simt; S.sel.simR = null; render(false); }
@@ -550,7 +719,14 @@ document.addEventListener("click", (ev) => {
   } else if (t.dataset.goto) {
     ev.preventDefault();
     const e = S.events.get(t.dataset.goto);
-    if (e) {
+    if (e && e.t === "N") {
+      const idx = roundsInfo("N");
+      S.sel.nRound = e.r === "reg" ? "F" + idx[e.id] : e.r;
+      S.open.add(e.id);
+      location.hash = "#/nacional";
+      render(false);
+      document.querySelector(`.match[data-id="${e.id}"]`)?.scrollIntoView({ block: "center" });
+    } else if (e) {
       S.sel.torneo = e.t;
       const idx = roundsInfo(e.t);
       S.sel.round = e.r === "reg" ? "F" + idx[e.id] : e.r;
@@ -582,6 +758,7 @@ document.addEventListener("input", (ev) => {
 });
 document.addEventListener("change", (ev) => {
   if (ev.target.id === "newsSel") { S.sel.newsClub = ev.target.value; render(false); }
+  if (ev.target.id === "nNewsSel") { S.sel.nNews = ev.target.value; render(false); }
 });
 window.addEventListener("hashchange", () => render(false));
 
@@ -665,7 +842,7 @@ function activeKeys() {
   const now = Date.now(), keys = new Set();
   for (const e of S.events.values()) {
     const t = new Date(e.d).getTime();
-    if (e.st === "in" || (e.st === "pre" && !e.tbd && t - now < 15 * 60000 && now - t < 4 * 3600000)) keys.add(espnKey(e.d));
+    if (e.st === "in" || (e.st === "pre" && !e.tbd && t - now < 15 * 60000 && now - t < 4 * 3600000)) keys.add((e.t === "N" ? "pn|" : "lp|") + espnKey(e.d));
   }
   return keys;
 }
@@ -673,13 +850,13 @@ function activeKeys() {
 async function poll() {
   clearTimeout(pollTimer);
   const keys = activeKeys();
-  const urls = [ESPN_SB, ...[...keys].map((k) => `${ESPN_SB}?dates=${k}`)];
+  const urls = [["lp", ESPN_SB], ["pn", ESPN_SB2], ...[...keys].map((k) => { const [lg, d] = k.split("|"); return [lg, `${lg === "pn" ? ESPN_SB2 : ESPN_SB}?dates=${d}`]; })];
   let changed = false, finished = false;
-  const res = await Promise.allSettled(urls.map((u) => getJSON(u)));
+  const res = await Promise.allSettled(urls.map(([lg, u]) => getJSON(u).then((j) => ({ lg, j }))));
   for (const r of res) {
     if (r.status !== "fulfilled") continue;
-    for (const raw of r.value.events || []) {
-      const e = compactEvent(raw);
+    for (const raw of r.value.j.events || []) {
+      const e = compactEvent(raw, r.value.lg);
       const prev = S.events.get(e.id);
       if (prev && JSON.stringify(prev) === JSON.stringify(e)) continue;
       S.events.set(e.id, e);

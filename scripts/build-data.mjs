@@ -14,14 +14,14 @@ async function getJSON(url) {
   return r.json();
 }
 
-async function partidos() {
+async function partidos(base = ESPN, lg = "lp") {
   const events = new Map();
   // Por mes: respuestas más chicas y sin tope de cantidad.
   for (let m = 1; m <= 12; m++) {
     const key = `${year}${String(m).padStart(2, "0")}`;
     try {
-      const d = await getJSON(`${ESPN}?dates=${key}&limit=500`);
-      for (const e of d.events || []) events.set(String(e.id), compactEvent(e));
+      const d = await getJSON(`${base}?dates=${key}&limit=500`);
+      for (const e of d.events || []) events.set(String(e.id), compactEvent(e, lg));
     } catch (err) { console.error("partidos", key, err.message); }
   }
   const list = [...events.values()].sort((a, b) => a.d.localeCompare(b.d));
@@ -52,13 +52,29 @@ async function rss(q, max = 8) {
   return items.slice(0, max);
 }
 
-async function noticias(prev) {
+// Clubes de la Primera Nacional (nombres desde la tabla de ESPN)
+async function clubesNacional() {
+  const d = await getJSON("https://site.api.espn.com/apis/v2/sports/soccer/arg.2/standings");
+  const out = {};
+  for (const c of d.children || []) for (const e of c.standings?.entries || []) out[String(e.team.id)] = e.team.displayName;
+  return out;
+}
+
+async function noticias(prev, pn = {}) {
   const out = { updated: new Date().toISOString(), general: [], clubs: {} };
   try { out.general = await rss('"Liga Profesional" fútbol argentino', 20); }
   catch (e) { out.general = prev?.general || []; console.error("noticias general", e.message); }
   for (const [id, t] of Object.entries(TEAMS)) {
     try { out.clubs[id] = await rss(t.q); }
     catch (e) { out.clubs[id] = prev?.clubs?.[id] || []; console.error("noticias", t.short, e.message); }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  try { out.nacional = await rss('"Primera Nacional" fútbol', 20); }
+  catch (e) { out.nacional = prev?.nacional || []; }
+  for (const [id, name] of Object.entries(pn)) {
+    const q = `"${name.replace(/\s*\(.*?\)\s*/g, " ").trim()}" fútbol`;
+    try { out.clubs[id] = await rss(q, 6); }
+    catch (e) { out.clubs[id] = prev?.clubs?.[id] || []; }
     await new Promise((r) => setTimeout(r, 400));
   }
   return out;
@@ -116,8 +132,17 @@ try {
   console.log("videos:", Object.keys(v).length);
 } catch (e) { console.error("videos", e.message); }
 
+// Primera Nacional
+let pnClubs = {};
+try {
+  const pn = await partidos("https://site.api.espn.com/apis/site/v2/sports/soccer/arg.2/scoreboard", "pn");
+  await writeFile("data/nacional.json", JSON.stringify(pn));
+  console.log("nacional:", pn.events.length);
+  pnClubs = await clubesNacional();
+} catch (e) { console.error("nacional", e.message); }
+
 let prev = null;
 try { prev = JSON.parse(await readFile("data/noticias.json", "utf8")); } catch {}
-const n = await noticias(prev);
+const n = await noticias(prev, pnClubs);
 await writeFile("data/noticias.json", JSON.stringify(n));
 console.log("noticias generales:", n.general.length);

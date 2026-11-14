@@ -218,3 +218,10 @@ body.tv .view { max-width: none; padding: 16px 24px; }
 .install-hint { margin: 10px auto 0; max-width: 420px; font-size: 12px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 body.app .top { padding-top: env(safe-area-inset-top); }
 @media (max-width: 420px) { .brand span { display: none; } .bell { padding: 6px 9px; font-size: 12px; } }
+
+/* Selector de categoría */
+.leagues { display: flex; gap: 6px; padding: 0 14px 6px; max-width: 1100px; margin: 0 auto; }
+.leagues a { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 14px; color: #cfe9de; border: 1px solid rgba(255,255,255,.2); }
+.leagues a.act { background: #fff; color: var(--head); border-color: #fff; }
+.t tr.fin td.pos { border-left-color: #f5b301; }
+.tvlg { color: #f5b301; }

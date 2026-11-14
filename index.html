@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Liga Profesional 2026 · Tablas y resultados en vivo</title>
+  <title>Fútbol argentino 2026 · Liga Profesional y Primera Nacional en vivo</title>
   <meta name="description" content="Resultados en vivo, zonas, tabla anual, promedios, playoffs y noticias de cada club de la Liga Profesional.">
   <meta name="theme-color" content="#0b3d2e">
   <link rel="icon" type="image/png" href="icons/favicon-32.png">
@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Liga Pro">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/style.css?v=9">
 </head>
 <body>
   <header class="top">
@@ -24,16 +24,9 @@
         <button id="bell" class="bell" type="button" title="Sonido de goles">🔕 Goles</button>
       </span>
     </div>
-    <nav class="tabs" id="tabs">
+    <div class="leagues" id="leagues"><a href="#/" data-lg="lp" class="act">Primera División</a><a href="#/nacional" data-lg="pn">Primera Nacional</a></div>
+    <nav class="tabs" id="tabs" data-lg="lp">
       <a href="#/" data-r="partidos">Partidos</a>
-      <a href="#/posiciones" data-r="posiciones">Zonas</a>
-      <a href="#/anual" data-r="anual">Anual</a>
-      <a href="#/promedios" data-r="promedios">Promedios</a>
-      <a href="#/playoffs" data-r="playoffs">Playoffs</a>
-      <a href="#/clubes" data-r="clubes">Clubes</a>
-      <a href="#/noticias" data-r="noticias">Noticias</a>
-      <a href="#/simulador" data-r="simulador">¿Y si…?</a>
-      <a href="#/tv" data-r="tv">📺 Pantalla grande</a>
     </nav>
     <div id="live-strip" class="live-strip" hidden></div>
   </header>
@@ -49,6 +42,6 @@
     <p id="install-hint" class="install-hint" hidden>📲 Para tenerla como app en Android: menú <b>⋮</b> de Chrome → <b>Instalar app</b> (o "Agregar a la pantalla principal").</p>
   </footer>
 
-  <script type="module" src="js/app.js?v=8"></script>
+  <script type="module" src="js/app.js?v=9"></script>
 </body>
 </html>

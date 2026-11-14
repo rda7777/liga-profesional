@@ -36,4 +36,6 @@ export const TEAMS = {
 };
 
 export const logo = (id) => `https://a.espncdn.com/i/teamlogos/soccer/500/${id}.png`;
-export const teamName = (id, fallback = "") => TEAMS[id]?.short || fallback || "A confirmar";
+// Nombres de clubes que no están en TEAMS (Primera Nacional), se completan con los datos de ESPN
+export const NAMES = {};
+export const teamName = (id, fallback = "") => TEAMS[id]?.short || NAMES[id] || (fallback || "").trim() || "A confirmar";
