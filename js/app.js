@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=11";
-import { compactEvent } from "./compact.js?v=11";
-import { confetti, fiestaSound } from "./fiesta.js?v=11";
-import { buildFacts } from "./datos.js?v=11";
-import { computeTables } from "./tables.js?v=11";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=12";
+import { compactEvent } from "./compact.js?v=12";
+import { confetti, fiestaSound } from "./fiesta.js?v=12";
+import { buildFacts } from "./datos.js?v=12";
+import { computeTables } from "./tables.js?v=12";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -285,7 +285,7 @@ function viewPartidos() {
     const zh = zoneOf(e.h[0]), za = zoneOf(e.a[0]);
     return zh && zh === za ? "Zona " + zh : "Interzonal";
   };
-  return `${factCard()}
+  return `${favsBlock()}${factCard()}
     <div class="seg">${["A", "C"].map((k) => `<button data-torneo="${k}" class="${k === t ? "act" : ""}">${TORNEO[k]}</button>`).join("")}</div>
     <div class="chips">${keys.map((k) => `<button class="chip${k === round ? " act" : ""}${liveR.has(k) ? " live" : ""}" data-round="${k}">${label(k)}</button>`).join("")}</div>
     <div class="card"><h2>${TORNEO[t]} · ${label(round) || ""}<small>Tocá un partido para ver el estadio</small></h2>${matchesByDay(list, zTag)}</div>`;
@@ -433,6 +433,48 @@ function facts() {
   if (factsCache.n !== S.events.size || factsCache.stamp !== lastFixture) factsCache = { n: S.events.size, stamp: lastFixture, list: buildFacts(S.events.values()) };
   return factsCache.list;
 }
+// ---------- Mis equipos (favoritos) ----------
+const fullName = (id) => TEAMS[id]?.name || NAMES["full" + id] || teamName(id);
+function favToast(id, added) {
+  const t = document.createElement("div");
+  t.className = "toast fav-toast";
+  t.innerHTML = added
+    ? `${img(id)}<div><b>★ ${esc(fullName(id))}</b><div>Agregado a <u>Mis equipos</u>. Lo vas a ver en el inicio con sus partidos y noticias, y sus goles se festejan con confeti.</div></div>`
+    : `${img(id)}<div><b>${esc(fullName(id))}</b><div>Lo sacaste de Mis equipos.</div></div>`;
+  t.addEventListener("click", () => { t.remove(); if (added) location.hash = TEAMS[id] ? "#/" : "#/nacional"; });
+  $("#toasts").prepend(t);
+  setTimeout(() => t.remove(), 6000);
+}
+function favCard(id) {
+  const evs = [...S.events.values()].filter((e) => e.h[0] === id || e.a[0] === id).sort((a, b) => a.d.localeCompare(b.d));
+  const live = evs.find((e) => e.st === "in");
+  const next = evs.find((e) => e.st === "pre" && e.sn !== "STATUS_POSTPONED");
+  const last = evs.filter((e) => e.st === "post").at(-1);
+  const vs = (e) => { const op = e.h[0] === id ? e.a : e.h; return `${e.h[0] === id ? "vs" : "en cancha de"} ${esc(nameOf(op))}`; };
+  let match = "";
+  if (live) match = `<a class="fm live" href="#/" data-goto="${live.id}"><span class="dot"></span>${esc(nameOf(live.h))} <b>${live.h[1] ?? 0}-${live.a[1] ?? 0}</b> ${esc(nameOf(live.a))} · ${statusLabel(live)}</a>`;
+  else if (next) match = `<div class="fm">Próximo: ${vs(next)} · ${next.tbd ? "a confirmar" : fDay.format(new Date(next.d)) + " " + fHour.format(new Date(next.d))}</div>`;
+  if (!live && last) {
+    const me = last.h[0] === id ? last.h : last.a, op = last.h[0] === id ? last.a : last.h;
+    const r = me[1] > op[1] || (me[1] === op[1] && me[2] != null && me[2] > op[2]) ? "G" : me[1] < op[1] || (me[1] === op[1] && me[2] != null && me[2] < op[2]) ? "P" : "E";
+    match += `<div class="fm">Último: <i class="res ${r}">${r}</i> ${esc(nameOf(last.h))} ${last.h[1]}-${last.a[1]} ${esc(nameOf(last.a))} ${videoLink(last, "vid mini")}</div>`;
+  }
+  const news = (S.news?.clubs?.[id] || []).slice(0, 3);
+  return `<div class="favcard">
+    <a class="fh" href="#/club/${id}">${img(id)}<b>${esc(teamName(id))}</b><span>Ver club ›</span></a>
+    ${match}
+    <div class="fn-list">${news.length ? news.map((n) => `<a href="${esc(n.link)}" target="_blank" rel="noopener">📰 ${esc(n.title)} <small>${esc(n.source || "")} · ${ago(n.date)}</small></a>`).join("") : `<small class="empty-n">${S.news ? "Sin noticias recientes." : "Cargando noticias…"}</small>`}</div>
+  </div>`;
+}
+function favsBlock() {
+  if (!favs.size) return `<div class="card favhint">⭐ Tocá <b>☆ Seguir</b> en la página de un club para tenerlo acá con sus partidos y últimas noticias. <a href="${route().lg === "pn" ? "#/nacional/clubes" : "#/clubes"}">Elegir clubes ›</a></div>`;
+  const ids = [...favs].sort((a, b) => {
+    const la = liveTeam(a) ? 0 : 1, lb = liveTeam(b) ? 0 : 1;
+    return la - lb || teamName(a).localeCompare(teamName(b));
+  });
+  return `<div class="favs"><div class="favs-title">★ Mis equipos</div><div class="favs-row">${ids.map(favCard).join("")}</div></div>`;
+}
+
 function factCard() {
   const F = facts();
   if (!F.length) return "";
@@ -583,7 +625,7 @@ function viewNPartidos() {
     const zh = zoneOfN(e.h[0]), za = zoneOfN(e.a[0]);
     return zh && zh === za ? "Zona " + zh : "Interzonal";
   };
-  return `<div class="chips">${keys.map((k) => `<button class="chip${k === round ? " act" : ""}${liveR.has(k) ? " live" : ""}" data-nround="${k}">${nLabel(k)}</button>`).join("")}</div>
+  return `${favsBlock()}<div class="chips">${keys.map((k) => `<button class="chip${k === round ? " act" : ""}${liveR.has(k) ? " live" : ""}" data-nround="${k}">${nLabel(k)}</button>`).join("")}</div>
     <div class="card"><h2>Primera Nacional · ${nLabel(round)}<small>Tocá un partido para ver el estadio</small></h2>${matchesByDay(list, zTag)}</div>`;
 }
 
@@ -714,8 +756,10 @@ document.addEventListener("click", (ev) => {
   else if (t.dataset.tplay) { S.sel.tPlay = t.dataset.tplay; render(); }
   else if (t.dataset.fav) {
     const id = t.dataset.fav;
-    favs.has(id) ? favs.delete(id) : favs.add(id);
+    const added = !favs.has(id);
+    added ? favs.add(id) : favs.delete(id);
     store.set("favs", [...favs]); render();
+    favToast(id, added);
   } else if (t.dataset.goto) {
     ev.preventDefault();
     const e = S.events.get(t.dataset.goto);

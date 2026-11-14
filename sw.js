@@ -1,5 +1,5 @@
 // Service worker: permite instalar la app y abrirla sin conexión con los últimos datos guardados.
-const VERSION = "v11";
+const VERSION = "v12";
 const SHELL = `shell-${VERSION}`, DATA = "data", LOGOS = "logos";
 const FILES = [
   "./", "./index.html", "./manifest.webmanifest",

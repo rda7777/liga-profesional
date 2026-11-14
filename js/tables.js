@@ -1,5 +1,5 @@
 // Cálculo de tablas a partir de los partidos (lo usa el simulador "¿Y si…?").
-import { TEAMS } from "./teams.js?v=11";
+import { TEAMS } from "./teams.js?v=12";
 
 const blank = (id) => ({ id, pj: 0, g: 0, e: 0, p: 0, gf: 0, gc: 0, pts: 0 });
 const add = (row, gf, gc) => {
