@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=13";
-import { compactEvent } from "./compact.js?v=13";
-import { confetti, fiestaSound } from "./fiesta.js?v=13";
-import { buildFacts } from "./datos.js?v=13";
-import { computeTables } from "./tables.js?v=13";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=14";
+import { compactEvent } from "./compact.js?v=14";
+import { confetti, fiestaSound } from "./fiesta.js?v=14";
+import { buildFacts } from "./datos.js?v=14";
+import { computeTables } from "./tables.js?v=14";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -289,7 +289,7 @@ function viewPartidos() {
   return `${favsBlock()}${factCard()}
     <div class="seg">${["A", "C"].map((k) => `<button data-torneo="${k}" class="${k === t ? "act" : ""}">${TORNEO[k]}</button>`).join("")}</div>
     <div class="chips">${keys.map((k) => `<button class="chip${k === round ? " act" : ""}${liveR.has(k) ? " live" : ""}" data-round="${k}">${label(k)}</button>`).join("")}</div>
-    <div class="card"><h2>${TORNEO[t]} · ${label(round) || ""}<small>Tocá un partido para ver el estadio</small></h2>${matchesByDay(list, zTag)}</div>`;
+    <div class="card"><h2>${TORNEO[t]} · ${label(round) || ""}</h2>${matchesByDay(list, zTag)}</div>`;
 }
 
 function viewPosiciones() {
@@ -658,7 +658,7 @@ function viewNPartidos() {
     return zh && zh === za ? "Zona " + zh : "Interzonal";
   };
   return `${favsBlock()}<div class="chips">${keys.map((k) => `<button class="chip${k === round ? " act" : ""}${liveR.has(k) ? " live" : ""}" data-nround="${k}">${nLabel(k)}</button>`).join("")}</div>
-    <div class="card"><h2>Primera Nacional · ${nLabel(round)}<small>Tocá un partido para ver el estadio</small></h2>${matchesByDay(list, zTag)}</div>`;
+    <div class="card"><h2>Primera Nacional · ${nLabel(round)}</h2>${matchesByDay(list, zTag)}</div>`;
 }
 
 function nZoneTable(rows, z) {
