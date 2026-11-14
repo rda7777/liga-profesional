@@ -1,14 +1,15 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=12";
-import { compactEvent } from "./compact.js?v=12";
-import { confetti, fiestaSound } from "./fiesta.js?v=12";
-import { buildFacts } from "./datos.js?v=12";
-import { computeTables } from "./tables.js?v=12";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=13";
+import { compactEvent } from "./compact.js?v=13";
+import { confetti, fiestaSound } from "./fiesta.js?v=13";
+import { buildFacts } from "./datos.js?v=13";
+import { computeTables } from "./tables.js?v=13";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
 const ESPN_SB = "https://site.api.espn.com/apis/site/v2/sports/soccer/arg.1/scoreboard";
 const ESPN_ST = "https://site.api.espn.com/apis/v2/sports/soccer/arg.1/standings";
 const SEASONTYPE = { A: 1, C: 6 };
+const NEWS_API = "https://liga-noticias.ricardoaufranc.workers.dev/";
 const ESPN_SB2 = "https://site.api.espn.com/apis/site/v2/sports/soccer/arg.2/scoreboard";
 const ESPN_ST2 = "https://site.api.espn.com/apis/v2/sports/soccer/arg.2/standings";
 const TZ = "America/Argentina/Buenos_Aires";
@@ -390,7 +391,7 @@ function viewClub(id) {
         ${upcoming.length ? `<div class="card"><h2>Próximos / en juego</h2>${matchesByDay(upcoming, (e) => e.r === "reg" ? TORNEO[e.t] : TORNEO[e.t] + " · " + ROUND_NAME[e.r])}</div>` : ""}
         <div class="card"><h2>Últimos resultados</h2>${matchesByDay(recent, (e) => e.r === "reg" ? TORNEO[e.t] : TORNEO[e.t] + " · " + ROUND_NAME[e.r])}</div>
       </div>
-      <div class="card"><h2>Noticias de ${esc(T.short)}<small>${S.news ? "act. " + ago(S.news.updated) : ""}</small></h2>${S.news ? newsList(S.news.clubs?.[id]) : `<p class="loading">Cargando…</p>`}</div>
+      <div class="card"><h2>Noticias de ${esc(T.short)}<small>${liveNews[id]?.items?.length ? "al momento" : S.news ? "act. " + ago(S.news.updated) : ""}</small></h2>${(fetchClubNews(id), clubNews(id).length || S.news) ? newsList(clubNews(id)) : `<p class="loading">Cargando…</p>`}</div>
     </div>`;
 }
 
@@ -398,8 +399,8 @@ function viewNoticias() {
   if (!S.news) return `<p class="loading">Cargando noticias…</p>`;
   const club = S.sel.newsClub;
   let items;
-  if (club === "favs") items = [...favs].flatMap((id) => (S.news.clubs?.[id] || []).map((n) => ({ ...n, club: id })));
-  else if (club) items = (S.news.clubs?.[club] || []).map((n) => ({ ...n, club }));
+  if (club === "favs") items = [...favs].flatMap((id) => (fetchClubNews(id), clubNews(id)).map((n) => ({ ...n, club: id })));
+  else if (club) { fetchClubNews(club); items = clubNews(club).map((n) => ({ ...n, club })); }
   else items = S.news.general || [];
   items = [...items].sort((a, b) => b.date.localeCompare(a.date));
   const opts = Object.keys(TEAMS).sort((a, b) => TEAMS[a].short.localeCompare(TEAMS[b].short))
@@ -433,6 +434,36 @@ function facts() {
   if (factsCache.n !== S.events.size || factsCache.stamp !== lastFixture) factsCache = { n: S.events.size, stamp: lastFixture, list: buildFacts(S.events.values()) };
   return factsCache.list;
 }
+// ---------- Noticias en el momento (servicio liga-noticias en Cloudflare) ----------
+const liveNews = {}; // id -> { t, items, pending }
+const mainName = (id) => TEAMS[id]?.kw?.[0] || (NAMES["full" + id] || NAMES[id] || "").replace(/\s*\(.*?\)\s*/g, " ").trim();
+const foreign = (n) => /\/(en|de|fr|it|pt|nl)\//.test(n.link || "");
+function newsQuery(id) {
+  const T = TEAMS[id];
+  const others = [...new Set([...Object.keys(TEAMS), ...nTeams()].filter((o) => o !== id).map(mainName).filter(Boolean))];
+  if (T) return { q: T.q, kw: T.kw.join("|"), neg: T.neg.join("|"), others: others.join("|") };
+  const full = NAMES["full" + id] || NAMES[id];
+  if (!full) return null;
+  const m = full.match(/^(.*?)\s*\((.*?)\)\s*$/);
+  const main = (m ? m[1] : full).trim();
+  return { q: m ? `"${main}" "${m[2].trim()}" fútbol` : `"${main}" fútbol argentino`, kw: main, neg: "", others: others.join("|") };
+}
+function fetchClubNews(id) {
+  const c = liveNews[id];
+  if (c && (c.pending || Date.now() - c.t < 10 * 60000)) return;
+  const qp = newsQuery(id);
+  if (!qp) return;
+  liveNews[id] = { ...(c || {}), pending: true };
+  fetch(NEWS_API + "?" + new URLSearchParams({ ...qp, max: "8", days: "3" }))
+    .then((r) => r.ok ? r.json() : Promise.reject(r.status))
+    .then((j) => { liveNews[id] = { t: Date.now(), items: (j.items || []).filter((n) => !foreign(n)) }; render(); })
+    .catch(() => { liveNews[id] = { ...(c || {}), t: Date.now(), pending: false }; });
+}
+function clubNews(id) {
+  const live = liveNews[id]?.items;
+  return live && live.length ? live : (S.news?.clubs?.[id] || []).filter((n) => !foreign(n));
+}
+
 // ---------- Mis equipos (favoritos) ----------
 const fullName = (id) => TEAMS[id]?.name || NAMES["full" + id] || teamName(id);
 function favToast(id, added) {
@@ -459,7 +490,8 @@ function favCard(id) {
     const r = me[1] > op[1] || (me[1] === op[1] && me[2] != null && me[2] > op[2]) ? "G" : me[1] < op[1] || (me[1] === op[1] && me[2] != null && me[2] < op[2]) ? "P" : "E";
     match += `<div class="fm">Último: <i class="res ${r}">${r}</i> ${esc(nameOf(last.h))} ${last.h[1]}-${last.a[1]} ${esc(nameOf(last.a))} ${videoLink(last, "vid mini")}</div>`;
   }
-  const news = (S.news?.clubs?.[id] || []).slice(0, 3);
+  fetchClubNews(id);
+  const news = clubNews(id).slice(0, 3);
   return `<div class="favcard">
     <a class="fh" href="#/club/${id}">${img(id)}<b>${esc(teamName(id))}</b><span>Ver club ›</span></a>
     ${match}
@@ -678,7 +710,7 @@ function viewNClubes() {
 function viewNNoticias() {
   if (!S.news) return `<p class="loading">Cargando noticias…</p>`;
   const club = S.sel.nNews;
-  const items = club ? (S.news.clubs?.[club] || []).map((n) => ({ ...n, club })) : (S.news.nacional || []);
+  const items = club ? (fetchClubNews(club), clubNews(club)).map((n) => ({ ...n, club })) : (S.news.nacional || []);
   const opts = nTeams().map((id) => `<option value="${id}"${id === club ? " selected" : ""}>${esc(teamName(id))}</option>`).join("");
   return `<select class="sel" id="nNewsSel"><option value="">Primera Nacional (general)</option>${opts}</select>
     <div class="card"><h2>Noticias<small>act. ${ago(S.news.updated)}</small></h2>${newsList([...items].sort((a, b) => b.date.localeCompare(a.date)), !!club)}</div>`;
@@ -711,7 +743,7 @@ function viewClubN(id) {
         ${evs.some((e) => e.st !== "post") ? `<div class="card"><h2>Próximos / en juego</h2>${matchesByDay(evs.filter((e) => e.st !== "post"), tag)}</div>` : ""}
         <div class="card"><h2>Últimos resultados</h2>${matchesByDay(played.slice(-8).reverse(), tag)}</div>
       </div>
-      <div class="card"><h2>Noticias de ${esc(teamName(id))}</h2>${S.news ? newsList(S.news.clubs?.[id]) : `<p class="loading">Cargando…</p>`}</div>
+      <div class="card"><h2>Noticias de ${esc(teamName(id))}</h2>${(fetchClubNews(id), clubNews(id).length || S.news) ? newsList(clubNews(id)) : `<p class="loading">Cargando…</p>`}</div>
     </div>`;
 }
 
