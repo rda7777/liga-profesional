@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=18";
-import { compactEvent } from "./compact.js?v=18";
-import { confetti, fiestaSound } from "./fiesta.js?v=18";
-import { buildFacts } from "./datos.js?v=18";
-import { computeTables } from "./tables.js?v=18";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=19";
+import { compactEvent } from "./compact.js?v=19";
+import { confetti, fiestaSound } from "./fiesta.js?v=19";
+import { buildFacts } from "./datos.js?v=19";
+import { computeTables } from "./tables.js?v=19";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -1006,6 +1006,7 @@ async function poll() {
       S.events.set(e.id, e);
       changed = true;
       if (prev && prev.st === "in" && e.st === "post") finished = true;
+      if (!liveBase) continue; // primera lectura al abrir o volver a la app: sin avisos de goles viejos
       if (prev && prev.st !== "pre" && prev.h[1] != null) {
         if ((e.h[1] ?? 0) > (prev.h[1] ?? 0)) goalAlert(e, e.h);
         if ((e.a[1] ?? 0) > (prev.a[1] ?? 0)) goalAlert(e, e.a);
@@ -1020,12 +1021,26 @@ async function poll() {
   if (finished || now - lastStandings > (isLive ? 2 * 60000 : STANDINGS_MS)) { lastStandings = now; await loadStandings(); changed = true; }
   if (now - lastFixture > FIXTURE_MS) { lastFixture = now; await loadFixture().catch(() => {}); changed = true; }
   if (changed) { render(); stamp(); }
+  if (res.some((r) => r.status === "fulfilled")) liveBase = true;
   pollTimer = setTimeout(poll, isLive ? LIVE_MS : IDLE_MS);
 }
 
 function stamp() { $("#updated").textContent = "Actualizado " + fHour.format(new Date()) + (liveEvents().length ? " · en vivo cada 12 s" : ""); }
 
-document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+// Sólo se avisan los goles que pasan con la app abierta. Al abrirla o volver a ella después
+// de un rato, la primera lectura actualiza los resultados en silencio.
+let liveBase = false, hiddenAt = 0;
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (Date.now() - hiddenAt > 20000) liveBase = false;
+  clearTrayNotifications();
+  poll();
+});
+// Saca de la bandeja del celular las notificaciones de gol que ya quedaron viejas al abrir la app
+function clearTrayNotifications() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.ready.then((reg) => reg.getNotifications?.()).then((ns) => (ns || []).forEach((n) => n.close())).catch(() => {});
+}
 
 // ---------- App instalable ----------
 const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
@@ -1053,6 +1068,7 @@ if (!standalone && isIOS) {
 (async function init() {
   paintBell();
   syncPush();
+  clearTrayNotifications();
   await Promise.all([loadFixture().catch((e) => console.warn(e)), loadStandings()]);
   lastFixture = lastStandings = Date.now();
   S.ready = true;
