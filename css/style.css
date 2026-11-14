@@ -271,3 +271,7 @@ body.app .top { padding-top: env(safe-area-inset-top); }
 .mbell.on { filter: none; opacity: 1; }
 .mbell.fixed { background: var(--brand-soft); }
 .mbell:hover { opacity: 1; }
+
+/* En vivo ahora */
+.livecard { border: 2px solid var(--brand); }
+.livecard h2 .ldot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #fff; margin-right: 7px; animation: blink 1.2s infinite; vertical-align: 1px; }

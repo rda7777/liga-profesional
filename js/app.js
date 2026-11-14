@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=20";
-import { compactEvent } from "./compact.js?v=20";
-import { confetti, fiestaSound } from "./fiesta.js?v=20";
-import { buildFacts } from "./datos.js?v=20";
-import { computeTables } from "./tables.js?v=20";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=21";
+import { compactEvent } from "./compact.js?v=21";
+import { confetti, fiestaSound } from "./fiesta.js?v=21";
+import { buildFacts } from "./datos.js?v=21";
+import { computeTables } from "./tables.js?v=21";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -304,7 +304,7 @@ function viewPartidos() {
     const zh = zoneOf(e.h[0]), za = zoneOf(e.a[0]);
     return zh && zh === za ? "Zona " + zh : "Interzonal";
   };
-  return `${favsBlock()}${factCard()}
+  return `${liveBlock()}${favsBlock()}${factCard()}
     <div class="seg">${["A", "C"].map((k) => `<button data-torneo="${k}" class="${k === t ? "act" : ""}">${TORNEO[k]}</button>`).join("")}</div>
     <div class="chips">${keys.map((k) => `<button class="chip${k === round ? " act" : ""}${liveR.has(k) ? " live" : ""}" data-round="${k}">${label(k)}</button>`).join("")}</div>
     <div class="card"><h2>${TORNEO[t]} · ${label(round) || ""}</h2>${matchesByDay(list, zTag)}</div>`;
@@ -518,6 +518,16 @@ function favCard(id) {
     <div class="fn-list">${news.length ? news.map((n) => `<a href="${esc(n.link)}" target="_blank" rel="noopener">📰 ${esc(n.title)} <small>${esc(n.source || "")} · ${ago(n.date)}</small></a>`).join("") : `<small class="empty-n">${S.news ? "Sin noticias recientes." : "Cargando noticias…"}</small>`}</div>
   </div>`;
 }
+// Partidos en vivo de las dos categorías, arriba de todo en la portada
+function liveBlock() {
+  const live = liveEvents();
+  if (!live.length) return "";
+  const tag = (e) => e.t === "N" ? (e.r === "reg" ? "Nacional" : NROUND[e.r]) : (e.r === "reg" ? TORNEO[e.t] : TORNEO[e.t] + " · " + ROUND_NAME[e.r]);
+  const order = { lp: 0, pn: 1 };
+  live.sort((a, b) => (a.t === "N") - (b.t === "N") || a.d.localeCompare(b.d));
+  return `<div class="card livecard"><h2><span><span class="ldot"></span>En vivo ahora</span><small>${live.length} partido${live.length > 1 ? "s" : ""}</small></h2>${live.map((e) => matchRow(e, { tag: tag(e) })).join("")}</div>`;
+}
+
 function favsBlock() {
   if (!favs.size) return `<div class="card favhint">⭐ Tocá <b>☆ Seguir</b> en la página de un club para tenerlo acá con sus partidos y últimas noticias. <a href="${route().lg === "pn" ? "#/nacional/clubes" : "#/clubes"}">Elegir clubes ›</a></div>`;
   const ids = [...favs].sort((a, b) => {
@@ -679,7 +689,7 @@ function viewNPartidos() {
     const zh = zoneOfN(e.h[0]), za = zoneOfN(e.a[0]);
     return zh && zh === za ? "Zona " + zh : "Interzonal";
   };
-  return `${favsBlock()}<div class="chips">${keys.map((k) => `<button class="chip${k === round ? " act" : ""}${liveR.has(k) ? " live" : ""}" data-nround="${k}">${nLabel(k)}</button>`).join("")}</div>
+  return `${liveBlock()}${favsBlock()}<div class="chips">${keys.map((k) => `<button class="chip${k === round ? " act" : ""}${liveR.has(k) ? " live" : ""}" data-nround="${k}">${nLabel(k)}</button>`).join("")}</div>
     <div class="card"><h2>Primera Nacional · ${nLabel(round)}</h2>${matchesByDay(list, zTag)}</div>`;
 }
 
