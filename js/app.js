@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=19";
-import { compactEvent } from "./compact.js?v=19";
-import { confetti, fiestaSound } from "./fiesta.js?v=19";
-import { buildFacts } from "./datos.js?v=19";
-import { computeTables } from "./tables.js?v=19";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=20";
+import { compactEvent } from "./compact.js?v=20";
+import { confetti, fiestaSound } from "./fiesta.js?v=20";
+import { buildFacts } from "./datos.js?v=20";
+import { computeTables } from "./tables.js?v=20";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -34,6 +34,10 @@ const store = {
 };
 let favs = new Set(store.get("favs", []));
 let alertMode = store.get("alertMode", "off"); // off | all | favs
+// Avisos por partido (como en Sofascore): { idPartido: "on" | "off" }
+let matchPref = store.get("matchPref", {});
+const followsByDefault = (e) => alertMode === "all" || (alertMode === "favs" && (favs.has(e.h[0]) || favs.has(e.a[0])));
+const notifies = (e) => matchPref[e.id] === "on" ? true : matchPref[e.id] === "off" ? false : followsByDefault(e);
 
 // ---------- Utilidades ----------
 const $ = (s, r = document) => r.querySelector(s);
@@ -234,6 +238,7 @@ function matchRow(e, opts = {}) {
       <a class="team h${hw ? " win" : ""}" href="#/club/${e.h[0]}" onclick="event.stopPropagation()"><span>${esc(nameOf(e.h))}</span>${img(e.h[0])}</a>
       <div class="score ${e.st}">${show ? `${e.h[1] ?? 0} - ${e.a[1] ?? 0}` : "vs"}${pens}</div>
       <a class="team${aw ? " win" : ""}" href="#/club/${e.a[0]}" onclick="event.stopPropagation()">${img(e.a[0])}<span>${esc(nameOf(e.a))}</span></a>
+      ${e.st === "post" ? `<span class="mbell"></span>` : `<button class="mbell${notifies(e) ? " on" : ""}${matchPref[e.id] ? " fixed" : ""}" data-mbell="${e.id}" title="${notifies(e) ? "Silenciar este partido" : "Avisarme los goles de este partido"}">${notifies(e) ? "🔔" : "🔕"}</button>`}
     </div>
     ${gh.length || ga.length || e.st === "post" ? `<div class="mgoals"><div></div><div class="hcol">${gh.join("<br>")}</div><div class="vcol">${videoLink(e)}</div><div>${ga.join("<br>")}</div></div>` : ""}
     <div class="mdet">
@@ -790,9 +795,10 @@ function renderLiveStrip() {
 }
 
 document.addEventListener("click", (ev) => {
-  const t = ev.target.closest("[data-nround],[data-torneo],[data-round],[data-ttabla],[data-tplay],[data-fav],[data-goto],[data-nextfact],[data-fs],[data-simt],[data-simr],[data-simtab],[data-simreset],[data-simclear],.match");
+  const t = ev.target.closest("[data-mbell],[data-nround],[data-torneo],[data-round],[data-ttabla],[data-tplay],[data-fav],[data-goto],[data-nextfact],[data-fs],[data-simt],[data-simr],[data-simtab],[data-simreset],[data-simclear],.match");
   if (!t) return;
   if (t.dataset.nround) { S.sel.nRound = t.dataset.nround; render(); return; }
+  if (t.dataset.mbell) { toggleMatchBell(t.dataset.mbell); return; }
   if (t.dataset.nextfact !== undefined) { S.sel.fact++; render(); }
   else if (t.dataset.fs !== undefined) { const d = document.documentElement; document.fullscreenElement ? document.exitFullscreen() : d.requestFullscreen?.().catch(() => {}); ensureAudio(); }
   else if (t.dataset.simt) { S.sel.simT = t.dataset.simt; S.sel.simR = null; render(false); }
@@ -894,6 +900,36 @@ $("#bell").addEventListener("click", () => {
   else syncPush();
 });
 
+// ---------- Campanita por partido ----------
+function toggleMatchBell(id) {
+  const e = S.events.get(id);
+  if (!e) return;
+  const was = notifies(e);
+  // Si cambiarlo lo deja igual que la regla general, se borra la excepción
+  const want = !was;
+  if (want === followsByDefault(e)) delete matchPref[id]; else matchPref[id] = want ? "on" : "off";
+  store.set("matchPref", matchPref);
+  ensureAudio();
+  render();
+  const vs = `${nameOf(e.h)} vs ${nameOf(e.a)}`;
+  const t = document.createElement("div");
+  t.className = "toast fav-toast";
+  t.innerHTML = want ? `<div><b>🔔 ${esc(vs)}</b><div>Te vamos a avisar cada gol de este partido.</div></div>` : `<div><b>🔕 ${esc(vs)}</b><div>Partido silenciado: no te van a llegar sus goles.</div></div>`;
+  $("#toasts").prepend(t); setTimeout(() => t.remove(), 4000);
+  if (want && "Notification" in window && Notification.permission === "default") Notification.requestPermission().then(() => syncPush()).catch(() => {});
+  else syncPush();
+}
+// Limpia excepciones de partidos que ya terminaron hace más de un día
+function pruneMatchPref() {
+  let ch = false;
+  for (const id of Object.keys(matchPref)) {
+    const e = S.events.get(id);
+    if (!e || (e.st === "post" && Date.now() - new Date(e.d) > 86400000)) { delete matchPref[id]; ch = true; }
+  }
+  if (ch) store.set("matchPref", matchPref);
+}
+const prefLists = () => ({ on: Object.keys(matchPref).filter((k) => matchPref[k] === "on"), off: Object.keys(matchPref).filter((k) => matchPref[k] === "off") });
+
 // ---------- Notificaciones push (goles con la pantalla apagada) ----------
 const pushOK = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 const b64ToBytes = (s) => { const b = atob((s + "===".slice((s.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, (c) => c.charCodeAt(0)); };
@@ -903,7 +939,7 @@ async function syncPush(fromClick = false) {
   try {
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
-    if (alertMode === "off") {
+    if (alertMode === "off" && !prefLists().on.length) {
       if (sub) { await postJSON("/baja", { endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); }
       paintPush(); return;
     }
@@ -913,7 +949,7 @@ async function syncPush(fromClick = false) {
       const { key } = await (await fetch(PUSH_API + "/clave")).json();
       sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
     }
-    await postJSON("/suscribir", { sub: sub.toJSON(), mode: alertMode, favs: [...favs] });
+    await postJSON("/suscribir", { sub: sub.toJSON(), mode: alertMode === "off" ? "none" : alertMode, favs: [...favs], ...prefLists() });
   } catch (e) { console.warn("push", e); }
   paintPush();
 }
@@ -922,11 +958,11 @@ async function paintPush() {
   if (!el) return;
   let txt = "", show = false;
   if (!pushOK) txt = "Este navegador no permite avisos con la pantalla apagada" + (/iPhone|iPad/.test(navigator.userAgent) ? " (en iPhone, agregá la app a inicio)." : ".");
-  else if (alertMode === "off") txt = "📳 Activá 🔔 Goles arriba para recibir avisos aunque tengas la pantalla apagada.";
+  else if (alertMode === "off" && !prefLists().on.length) txt = "📳 Activá 🔔 Goles arriba para recibir avisos aunque tengas la pantalla apagada.";
   else if (Notification.permission === "denied") txt = "📳 Las notificaciones están bloqueadas. Habilitalas en los permisos del sitio para recibir goles con la pantalla apagada.";
   else if (Notification.permission === "granted") {
     const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
-    if (sub) { txt = `📳 Avisos de gol con pantalla apagada: <b>activados</b> (${alertMode === "favs" ? "solo favoritos" : "todos los partidos"}).`; show = true; }
+    if (sub) { txt = `📳 Avisos de gol con pantalla apagada: <b>activados</b> (${alertMode === "favs" ? "favoritos" : alertMode === "all" ? "todos los partidos" : "solo partidos elegidos"}${prefLists().on.length || prefLists().off.length ? ", con excepciones por partido" : ""}).`; show = true; }
   } else txt = "📳 Tocá 🔔 Goles para permitir avisos con la pantalla apagada.";
   el.innerHTML = txt; btn.hidden = !show;
 }
@@ -945,7 +981,7 @@ $("#probar-push").addEventListener("click", async () => {
 
 function goalAlert(e, side) {
   const other = side === e.h ? e.a : e.h;
-  const wants = alertMode === "all" || (alertMode === "favs" && (favs.has(e.h[0]) || favs.has(e.a[0])));
+  const wants = notifies(e);
   const last = [...e.g].reverse().find((g) => g[0] === side[0]);
   const txt = `${nameOf(e.h)} ${e.h[1]} - ${e.a[1]} ${nameOf(e.a)}`;
   const who = last ? `${last[2]} ${last[1]}${last[3] === "o" ? " (en contra)" : last[3] === "p" ? " (penal)" : ""}` : (e.clk || "");
@@ -1071,6 +1107,7 @@ if (!standalone && isIOS) {
   clearTrayNotifications();
   await Promise.all([loadFixture().catch((e) => console.warn(e)), loadStandings()]);
   lastFixture = lastStandings = Date.now();
+  pruneMatchPref();
   S.ready = true;
   render(false); stamp();
   loadNews().then(() => render());

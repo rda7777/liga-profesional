@@ -72,7 +72,13 @@ function goalRecord(e, side) {
   };
 }
 
-const wants = (s, g) => g.to ? g.to === s.k : s.mode === "all" || (s.mode === "favs" && g.teams.some((t) => (s.favs || []).includes(t)));
+// Prioridad: prueba > partido silenciado > partido activado > regla general (todos / favoritos / ninguno)
+const wants = (s, g) => {
+  if (g.to) return g.to === s.k;
+  if ((s.off || []).includes(g.ev)) return false;
+  if ((s.on || []).includes(g.ev)) return true;
+  return s.mode === "all" || (s.mode === "favs" && g.teams.some((t) => (s.favs || []).includes(t)));
+};
 
 async function deliver(env, goals) {
   const all = (await env.KV.get("goles", "json")) || [];
@@ -137,7 +143,8 @@ export default {
         if (!b.sub?.endpoint || !/^https:\/\//.test(b.sub.endpoint)) return json({ error: "suscripción inválida" }, 400);
         const subs = (await env.KV.get("subs", "json")) || {};
         const k = await sha(b.sub.endpoint);
-        subs[k] = { sub: { endpoint: b.sub.endpoint }, mode: b.mode === "favs" ? "favs" : "all", favs: (b.favs || []).map(String).slice(0, 80), t: Date.now() };
+        subs[k] = { sub: { endpoint: b.sub.endpoint }, mode: ["all", "favs", "none"].includes(b.mode) ? b.mode : "all", favs: (b.favs || []).map(String).slice(0, 80),
+          on: (b.on || []).map(String).slice(0, 200), off: (b.off || []).map(String).slice(0, 200), t: Date.now() };
         await env.KV.put("subs", JSON.stringify(subs));
         return json({ ok: true });
       }
