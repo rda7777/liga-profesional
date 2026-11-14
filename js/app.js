@@ -1,8 +1,8 @@
-import { TEAMS, logo, teamName } from "./teams.js?v=7";
-import { compactEvent } from "./compact.js?v=7";
-import { confetti, fiestaSound } from "./fiesta.js?v=7";
-import { buildFacts } from "./datos.js?v=7";
-import { computeTables } from "./tables.js?v=7";
+import { TEAMS, logo, teamName } from "./teams.js?v=8";
+import { compactEvent } from "./compact.js?v=8";
+import { confetti, fiestaSound } from "./fiesta.js?v=8";
+import { buildFacts } from "./datos.js?v=8";
+import { computeTables } from "./tables.js?v=8";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -722,7 +722,11 @@ $("#install").addEventListener("click", async () => {
   installEvt = null; $("#install").hidden = true;
 });
 window.addEventListener("appinstalled", () => { $("#install").hidden = true; $("#install-hint").hidden = true; });
-if (!standalone && /Android/i.test(navigator.userAgent)) setTimeout(() => { if (!installEvt) $("#install-hint").hidden = false; }, 4000);
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+if (!standalone && isIOS) {
+  $("#install-hint").innerHTML = '📲 Para tenerla como app en iPhone o iPad: abrila en <b>Safari</b>, tocá <b>Compartir</b> (el cuadrado con la flecha ↑) → <b>Agregar a inicio</b>.';
+  $("#install-hint").hidden = false;
+} else if (!standalone && /Android/i.test(navigator.userAgent)) setTimeout(() => { if (!installEvt) $("#install-hint").hidden = false; }, 4000);
 
 // ---------- Inicio ----------
 (async function init() {
