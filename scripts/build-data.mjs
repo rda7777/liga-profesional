@@ -72,7 +72,9 @@ async function noticias(prev, pn = {}) {
   try { out.nacional = await rss('"Primera Nacional" fútbol', 20); }
   catch (e) { out.nacional = prev?.nacional || []; }
   for (const [id, name] of Object.entries(pn)) {
-    const q = `"${name.replace(/\s*\(.*?\)\s*/g, " ").trim()}" fútbol`;
+    // "Colón (Santa Fe)" -> "Colón" "Santa Fe" fútbol argentino (evita homónimos de otros países)
+    const m = name.match(/^(.*?)\s*\((.*?)\)\s*$/);
+    const q = m ? `"${m[1].trim()}" "${m[2].trim()}" fútbol` : `"${name.trim()}" fútbol argentino`;
     try { out.clubs[id] = await rss(q, 6); }
     catch (e) { out.clubs[id] = prev?.clubs?.[id] || []; }
     await new Promise((r) => setTimeout(r, 400));
