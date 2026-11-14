@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=15";
-import { compactEvent } from "./compact.js?v=15";
-import { confetti, fiestaSound } from "./fiesta.js?v=15";
-import { buildFacts } from "./datos.js?v=15";
-import { computeTables } from "./tables.js?v=15";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=16";
+import { compactEvent } from "./compact.js?v=16";
+import { confetti, fiestaSound } from "./fiesta.js?v=16";
+import { buildFacts } from "./datos.js?v=16";
+import { computeTables } from "./tables.js?v=16";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -322,7 +322,7 @@ function viewAnual() {
     <td class="hide-s">${r.g}</td><td class="hide-s">${r.e}</td><td class="hide-s">${r.p}</td><td class="hide-s">${r.gf}</td><td class="hide-s">${r.gc}</td><td>${r.gf - r.gc > 0 ? "+" : ""}${r.gf - r.gc}</td></tr>`).join("");
   return `<div class="card"><h2>Tabla anual 2026<small>Apertura + Clausura (fase regular)</small></h2>
     <table class="t"><thead><tr><th>#</th><th style="text-align:left">Equipo</th><th>Pts</th><th>PJ</th><th class="hide-s">G</th><th class="hide-s">E</th><th class="hide-s">P</th><th class="hide-s">GF</th><th class="hide-s">GC</th><th>DG</th></tr></thead><tbody>${body}</tbody></table>
-    <div class="legend"><span><i style="background:var(--lib)"></i>Copa Libertadores (3 mejores; si ya clasificaron por título, el cupo pasa al siguiente)</span><span><i style="background:var(--down)"></i>Desciende por tabla anual</span><span>💀 Zona de descenso</span><span>👻 Cerca del descenso</span></div></div>`;
+    <div class="legend"><span><i style="background:var(--lib)"></i>Copa Libertadores (3 mejores; si ya clasificaron por título, el cupo pasa al siguiente)</span><span><i style="background:var(--down)"></i>Desciende por tabla anual</span></div></div>`;
 }
 
 function viewPromedios() {
@@ -335,7 +335,7 @@ function viewPromedios() {
     <td class="hide-s">${r.base}</td><td class="hide-s">${r.y26}</td></tr>`).join("");
   return `<div class="card"><h2>Promedios<small>2024 + 2025 + 2026</small></h2>
     <table class="t"><thead><tr><th>#</th><th style="text-align:left">Equipo</th><th>Prom.</th><th>Pts</th><th>PJ</th><th class="hide-s">24-25</th><th class="hide-s">2026</th></tr></thead><tbody>${body}</tbody></table>
-    <div class="legend"><span><i style="background:var(--down)"></i>Desciende por promedios. Si el mismo club es último en ambas tablas, el segundo descenso es para el anteúltimo de la anual.</span><span>💀 Zona de descenso</span><span>👻 Cerca del descenso</span></div></div>`;
+    <div class="legend"><span><i style="background:var(--down)"></i>Desciende por promedios. Si el mismo club es último en ambas tablas, el segundo descenso es para el anteúltimo de la anual.</span></div></div>`;
 }
 
 function bracketMatch(e) {
@@ -691,7 +691,7 @@ function viewNZonas() {
   const z = S.standings.N;
   if (!z) return `<p class="loading">Cargando posiciones…</p>`;
   return `<div class="grid2">${nZoneTable(z.A, "A")}${nZoneTable(z.B, "B")}</div>
-    <div class="legend"><span><i style="background:#f5b301"></i>Final por el primer ascenso</span><span><i style="background:var(--accent)"></i>Reducido (2° al 8°)</span><span><i style="background:var(--down)"></i>Descienden (últimos 2 de cada zona)</span><span>💀 Zona de descenso</span><span>👻 Cerca del descenso</span></div>`;
+    <div class="legend"><span><i style="background:#f5b301"></i>Final por el primer ascenso</span><span><i style="background:var(--accent)"></i>Reducido (2° al 8°)</span><span><i style="background:var(--down)"></i>Descienden (últimos 2 de cada zona)</span></div>`;
 }
 
 function viewNAscenso() {
