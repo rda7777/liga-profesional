@@ -211,3 +211,10 @@ body.tv .view { max-width: none; padding: 16px 24px; }
 .tvgoal .gs { font-size: 30px; margin-top: 10px; }
 .tvgoal .gw { font-size: 22px; opacity: .85; margin-top: 6px; }
 @keyframes bounce { to { transform: translateY(-14px) scale(1.05); } }
+
+/* App instalable */
+.topbtns { display: flex; gap: 6px; }
+.bell.inst { background: #fff; color: var(--head); border-color: #fff; font-weight: 700; }
+.install-hint { margin: 10px auto 0; max-width: 420px; font-size: 12px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+body.app .top { padding-top: env(safe-area-inset-top); }
+@media (max-width: 420px) { .brand span { display: none; } .bell { padding: 6px 9px; font-size: 12px; } }

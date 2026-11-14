@@ -6,14 +6,23 @@
   <title>Liga Profesional 2026 · Tablas y resultados en vivo</title>
   <meta name="description" content="Resultados en vivo, zonas, tabla anual, promedios, playoffs y noticias de cada club de la Liga Profesional.">
   <meta name="theme-color" content="#0b3d2e">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
-  <link rel="stylesheet" href="css/style.css?v=6">
+  <link rel="icon" type="image/png" href="icons/favicon-32.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Liga Pro">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="css/style.css?v=7">
 </head>
 <body>
   <header class="top">
     <div class="top-row">
       <a class="brand" href="#/">⚽ <b>Liga Profesional</b> <span>2026</span></a>
-      <button id="bell" class="bell" type="button" title="Sonido de goles">🔕 Goles</button>
+      <span class="topbtns">
+        <button id="install" class="bell inst" type="button" hidden>📲 Instalar app</button>
+        <button id="bell" class="bell" type="button" title="Sonido de goles">🔕 Goles</button>
+      </span>
     </div>
     <nav class="tabs" id="tabs">
       <a href="#/" data-r="partidos">Partidos</a>
@@ -37,8 +46,9 @@
     Datos: ESPN (resultados y posiciones, en vivo) · Promedios: base 2024–2025 de El Gráfico + puntos 2026 · Noticias: Google News.
     <br><span id="updated"></span>
     <br><button id="probar" class="probar" type="button">🔔 Probar aviso de gol</button>
+    <p id="install-hint" class="install-hint" hidden>📲 Para tenerla como app en Android: menú <b>⋮</b> de Chrome → <b>Instalar app</b> (o "Agregar a la pantalla principal").</p>
   </footer>
 
-  <script type="module" src="js/app.js?v=6"></script>
+  <script type="module" src="js/app.js?v=7"></script>
 </body>
 </html>

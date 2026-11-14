@@ -1,8 +1,8 @@
-import { TEAMS, logo, teamName } from "./teams.js?v=6";
-import { compactEvent } from "./compact.js?v=6";
-import { confetti, fiestaSound } from "./fiesta.js?v=6";
-import { buildFacts } from "./datos.js?v=6";
-import { computeTables } from "./tables.js?v=6";
+import { TEAMS, logo, teamName } from "./teams.js?v=7";
+import { compactEvent } from "./compact.js?v=7";
+import { confetti, fiestaSound } from "./fiesta.js?v=7";
+import { buildFacts } from "./datos.js?v=7";
+import { computeTables } from "./tables.js?v=7";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -705,6 +705,24 @@ async function poll() {
 function stamp() { $("#updated").textContent = "Actualizado " + fHour.format(new Date()) + (liveEvents().length ? " · en vivo cada 12 s" : ""); }
 
 document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+
+// ---------- App instalable ----------
+const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+document.body.classList.toggle("app", !!standalone);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch((e) => console.warn("sw", e));
+let installEvt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault(); installEvt = e;
+  $("#install").hidden = false; $("#install-hint").hidden = true;
+});
+$("#install").addEventListener("click", async () => {
+  if (!installEvt) return;
+  installEvt.prompt();
+  await installEvt.userChoice.catch(() => {});
+  installEvt = null; $("#install").hidden = true;
+});
+window.addEventListener("appinstalled", () => { $("#install").hidden = true; $("#install-hint").hidden = true; });
+if (!standalone && /Android/i.test(navigator.userAgent)) setTimeout(() => { if (!installEvt) $("#install-hint").hidden = false; }, 4000);
 
 // ---------- Inicio ----------
 (async function init() {

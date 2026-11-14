@@ -1,0 +1,25 @@
+{
+  "name": "Liga Profesional 2026 · En vivo",
+  "short_name": "Liga Pro",
+  "description": "Resultados en vivo con aviso de gol, zonas, anual, promedios, playoffs, videos y noticias de la Liga Profesional.",
+  "lang": "es-AR",
+  "start_url": "./?app=1",
+  "scope": "./",
+  "id": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b3d2e",
+  "theme_color": "#0b3d2e",
+  "categories": ["sports", "news"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Partidos", "url": "./#/", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Zonas", "url": "./#/posiciones", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Promedios", "url": "./#/promedios", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Pantalla grande", "url": "./#/tv", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
