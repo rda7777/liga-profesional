@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=22";
-import { compactEvent } from "./compact.js?v=22";
-import { confetti, fiestaSound } from "./fiesta.js?v=22";
-import { buildFacts } from "./datos.js?v=22";
-import { computeTables } from "./tables.js?v=22";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=23";
+import { compactEvent } from "./compact.js?v=23";
+import { confetti, fiestaSound } from "./fiesta.js?v=23";
+import { buildFacts } from "./datos.js?v=23";
+import { computeTables } from "./tables.js?v=23";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -252,7 +252,8 @@ function statusLabel(e) {
 
 function matchRow(e, opts = {}) {
   const show = e.st !== "pre";
-  const hw = e.st === "post" && e.h[3], aw = e.st === "post" && e.a[3];
+  const nw = e.t === "N" && (e.r === "p1" || e.r === "fa") ? nSingleWinner(e) : null;
+  const hw = e.st === "post" && (e.h[3] || nw === e.h[0]), aw = e.st === "post" && (e.a[3] || nw === e.a[0]);
   const pens = e.h[2] != null && e.a[2] != null ? `<small>(${e.h[2]}-${e.a[2]} pen)</small>` : "";
   const goals = (side) => e.g.filter((g) => g[0] === side[0]).map((g) => `⚽ ${esc(g[2])} ${esc(g[1])}${g[3] === "p" ? " (p)" : g[3] === "o" ? " (e/c)" : ""}`)
     .concat(e.rc.filter((r) => r[0] === side[0]).map((r) => `🟥 ${esc(r[2])} ${esc(r[1])}`));
@@ -736,24 +737,103 @@ function viewNZonas() {
     <div class="legend"><span><i style="background:#f5b301"></i>Final por el primer ascenso</span><span><i style="background:var(--accent)"></i>Reducido (2° al 8°)</span><span><i style="background:var(--down)"></i>Descienden (últimos 2 de cada zona)</span></div>`;
 }
 
+// ---------- Reducido: quién pasa y cruces ----------
+const SUSP = /SUSPENDED|POSTPONED|CANCELED|ABANDONED|DELAYED/;
+// Tabla general (las dos zonas juntas) para ventaja deportiva y para armar los cruces
+function nGeneral() {
+  const rows = Object.values(S.standings.N || {}).flat();
+  rows.sort((a, b) => b.pts - a.pts || (b.gf - b.gc) - (a.gf - a.gc) || b.gf - a.gf);
+  return rows.map((r) => r.id);
+}
+const nRank = (id) => { const i = nGeneral().indexOf(id); return i < 0 ? 999 : i; };
+// Ganador de un partido único (1ª fase y final por el ascenso): con empate pasa el local (ventaja deportiva)
+function nSingleWinner(e) {
+  if (!e || e.st !== "post" || SUSP.test(e.sn)) return null;
+  if (e.h[3]) return e.h[0];
+  if (e.a[3]) return e.a[0];
+  if (e.h[2] != null && e.a[2] != null) return e.h[2] > e.a[2] ? e.h[0] : e.a[0];
+  if (e.r === "p1" && e.h[1] === e.a[1]) return e.h[0];
+  return e.h[1] > e.a[1] ? e.h[0] : e.a[1] > e.h[1] ? e.a[0] : null;
+}
+// Series de ida y vuelta (cuartos, semis, final): agrupa por par de equipos
+function nSeries(list, round) {
+  const map = new Map();
+  for (const e of list) {
+    const k = [e.h[0], e.a[0]].sort().join("-");
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(e);
+  }
+  return [...map.values()].map((legs) => {
+    legs.sort((a, b) => a.d.localeCompare(b.d));
+    const [x, y] = [legs[0].h[0], legs[0].a[0]];
+    const tot = { [x]: 0, [y]: 0 };
+    let done = legs.length >= 2 && legs.every((l) => l.st === "post" && !SUSP.test(l.sn));
+    for (const l of legs) if (l.st !== "pre") { tot[l.h[0]] += l.h[1] ?? 0; tot[l.a[0]] += l.a[1] ?? 0; }
+    let w = null;
+    if (done) {
+      if (tot[x] !== tot[y]) w = tot[x] > tot[y] ? x : y;
+      else if (round === "f") { const last = legs.at(-1); w = last.h[3] ? last.h[0] : last.a[3] ? last.a[0] : null; }
+      else w = nRank(x) < nRank(y) ? x : y; // ventaja deportiva del mejor ubicado
+    }
+    return { legs, teams: [x, y], tot, w };
+  });
+}
+const sideOf = (id, e) => e && (e.h[0] === id ? e.h : e.a[0] === id ? e.a : null);
+const teamRow = (id, name, score, win) => `<div class="bt${win ? " w" : ""}">${id ? img(id) : ""}<span>${esc(name)}</span><b>${score ?? ""}</b></div>`;
+function singleCard(e) {
+  if (!e) return `<div class="bm"><div class="bt">A definir</div><div class="bt">A definir</div></div>`;
+  const w = nSingleWinner(e);
+  const draw = e.st === "post" && e.r === "p1" && e.h[1] === e.a[1] && e.h[2] == null;
+  const info = SUSP.test(e.sn) ? "Suspendido · resultado pendiente" : statusLabel(e) + (draw ? " · pasa el local por ventaja deportiva" : "") + (e.st === "pre" && !e.tbd ? " · " + fShort.format(new Date(e.d)) : "");
+  return `<a class="bm ${e.st}" href="#/" data-goto="${e.id}">${teamRow(e.h[0], nameOf(e.h), e.st === "pre" ? "" : e.h[1], w === e.h[0])}${teamRow(e.a[0], nameOf(e.a), e.st === "pre" ? "" : e.a[1], w === e.a[0])}<div class="bi">${info}</div></a>`;
+}
+function seriesCard(sr) {
+  const [x, y] = sr.teams;
+  const nm = (id) => nameOf(sideOf(id, sr.legs[0]));
+  const started = sr.legs.some((l) => l.st !== "pre");
+  const legsTxt = sr.legs.map((l, i) => `${i ? "Vuelta" : "Ida"}: ${l.st === "pre" ? (l.tbd ? "a conf." : fShort.format(new Date(l.d))) : `${nameOf(l.h)} ${l.h[1]}-${l.a[1]} ${nameOf(l.a)}`}`).join(" · ");
+  return `<a class="bm" href="#/" data-goto="${sr.legs.at(-1).id}">${teamRow(x, nm(x), started ? sr.tot[x] : "", sr.w === x)}${teamRow(y, nm(y), started ? sr.tot[y] : "", sr.w === y)}<div class="bi">${legsTxt}${started ? " · global" : ""}</div></a>`;
+}
+const projCard = (a, b, note) => `<div class="bm proj">${teamRow(a.id, a.name, "", false)}${teamRow(b.id, b.name, "", false)}<div class="bi">${note}</div></div>`;
+
 function viewNAscenso() {
   const evs = nEvents().filter((e) => e.r !== "reg").sort((a, b) => a.d.localeCompare(b.d) || a.id.localeCompare(b.id));
   const fin = evs.filter((e) => e.r === "fa");
-  const winner = (e) => e?.st === "post" ? (e.h[3] ? e.h : e.a[3] ? e.a : null) : null;
-  const finW = winner(fin.at(-1));
-  const need = { p1: 7, qf: 4, sf: 2, f: 1 };
-  const cols = ["p1", "qf", "sf", "f"].map((r) => {
-    const list = evs.filter((e) => e.r === r);
-    const items = Array.from({ length: Math.max(need[r], list.length) }, (_, i) => bracketMatch(list[i]));
-    return `<div class="bcol"><h3>${{ p1: "1ª fase", qf: "Cuartos", sf: "Semis", f: "Final" }[r]}</h3>${items.join("")}</div>`;
-  }).join("");
-  const redW = winner(evs.filter((e) => e.r === "f").at(-1));
+  const finW = nSingleWinner(fin.at(-1));
+  const finE = fin.at(-1);
+  const finLoser = finW && finE ? (finE.h[0] === finW ? finE.a : finE.h) : null;
+  const p1 = evs.filter((e) => e.r === "p1");
+  const p1Cards = Array.from({ length: Math.max(7, p1.length) }, (_, i) => singleCard(p1[i]));
+
+  // Cuartos: si ESPN ya los cargó se usan; si no, se proyectan con el reglamento
+  const qfEv = evs.filter((e) => e.r === "qf");
+  let qfHtml, qfNote = "";
+  if (qfEv.length) qfHtml = nSeries(qfEv, "qf").map(seriesCard);
+  else {
+    const winners = p1.map((e) => ({ e, w: nSingleWinner(e) }));
+    const pend = winners.filter((x) => !x.w);
+    const clas = winners.filter((x) => x.w).map((x) => ({ id: x.w, name: nameOf(sideOf(x.w, x.e)) }));
+    if (finLoser) clas.push({ id: finLoser[0], name: nameOf(finLoser) });
+    if (p1.length >= 7 && !pend.length && clas.length === 8) {
+      clas.sort((a, b) => nRank(a.id) - nRank(b.id));
+      qfHtml = [0, 1, 2, 3].map((i) => projCard(clas[7 - i], clas[i], `Cruce proyectado · ${esc(clas[i].name)} define de local`));
+      qfNote = `<p class="projnote">Cruces armados con la tabla general (1° vs 8°, 2° vs 7°…), como dice el reglamento. Se reemplazan por los oficiales apenas ESPN los publique.</p>`;
+    } else {
+      qfHtml = [`<div class="bm proj"><div class="bi"><b>Ya clasificados:</b> ${clas.map((c) => esc(c.name)).join(", ") || "—"}</div>${pend.map((x) => `<div class="bi">Pendiente: ${esc(nameOf(x.e.h))} vs ${esc(nameOf(x.e.a))}${SUSP.test(x.e.sn) ? " (suspendido)" : x.e.st === "in" ? " (en juego)" : ""}</div>`).join("")}<div class="bi">Los cruces se arman cuando estén los 8.</div></div>`];
+    }
+  }
+  const sfEv = evs.filter((e) => e.r === "sf"), fEv = evs.filter((e) => e.r === "f");
+  const sfHtml = sfEv.length ? nSeries(sfEv, "sf").map(seriesCard) : [singleCard(null), singleCard(null)];
+  const fSeries = fEv.length ? nSeries(fEv, "f") : [];
+  const fHtml = fSeries.length ? fSeries.map(seriesCard) : [singleCard(null)];
+  const col = (t, items) => `<div class="bcol"><h3>${t}</h3>${items.join("")}</div>`;
+  const redW = fSeries[0]?.w;
   return `<div class="card"><h2>Final por el primer ascenso<small>1° Zona A vs 1° Zona B</small></h2>
-      ${finW ? `<div class="champ">${img(finW[0])}🏆 <b>${esc(nameOf(finW))}</b> campeón y ascendido a Primera</div>` : ""}
+      ${finW ? `<div class="champ">${img(finW)}🏆 <b>${esc(nameOf(sideOf(finW, finE)))}</b> campeón y ascendido a Primera</div>` : ""}
       ${fin.length ? matchesByDay(fin) : `<p class="empty">Todavía no está programada.</p>`}</div>
     <div class="card"><h2>Reducido por el segundo ascenso<small>El perdedor de la final entra en cuartos</small></h2>
-      ${redW ? `<div class="champ">${img(redW[0])}⬆️ <b>${esc(nameOf(redW))}</b> ganó el Reducido y asciende</div>` : ""}
-      ${evs.some((e) => e.r !== "fa") ? `<div class="bracket">${cols}</div>` : `<p class="empty">El Reducido todavía no empezó.</p>`}</div>`;
+      ${redW ? `<div class="champ">${img(redW)}⬆️ <b>${esc(teamName(redW))}</b> ganó el Reducido y asciende</div>` : ""}
+      ${evs.some((e) => e.r !== "fa") ? `<div class="bracket">${col("1ª fase", p1Cards)}${col("Cuartos", qfHtml)}${col("Semis", sfHtml)}${col("Final", fHtml)}</div>${qfNote}` : `<p class="empty">El Reducido todavía no empezó.</p>`}</div>`;
 }
 
 function nTeams() {
