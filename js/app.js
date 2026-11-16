@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=21";
-import { compactEvent } from "./compact.js?v=21";
-import { confetti, fiestaSound } from "./fiesta.js?v=21";
-import { buildFacts } from "./datos.js?v=21";
-import { computeTables } from "./tables.js?v=21";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=22";
+import { compactEvent } from "./compact.js?v=22";
+import { confetti, fiestaSound } from "./fiesta.js?v=22";
+import { buildFacts } from "./datos.js?v=22";
+import { computeTables } from "./tables.js?v=22";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -99,6 +99,32 @@ async function loadFixture() {
     // No pisar datos en vivo más nuevos con el fixture
     if (!cur || cur.st === "pre" || ev.st === "post") S.events.set(ev.id, ev);
   }
+}
+
+// Partidos de los próximos días directo de ESPN (para que aparezcan enseguida los cruces
+// de la ronda siguiente de los playoffs, sin esperar la actualización automática)
+let lastUpcoming = 0, upcomingBusy = false;
+async function refreshUpcoming(force = false) {
+  if (upcomingBusy || (!force && Date.now() - lastUpcoming < 10 * 60000)) return;
+  upcomingBusy = true; lastUpcoming = Date.now();
+  let added = false;
+  try {
+    for (const [lg, base] of [["lp", ESPN_SB], ["pn", ESPN_SB2]]) {
+      const d0 = await getJSON(base).catch(() => null);
+      if (!d0) continue;
+      const cal = (d0.leagues?.[0]?.calendar || []).flatMap((c) => typeof c === "string" ? [c] : (c.entries || []).map((x) => x.startDate || x.value)).filter(Boolean);
+      const from = Date.now() - 2 * 86400000, to = Date.now() + 30 * 86400000;
+      const days = [...new Set(cal.filter((c) => { const t = Date.parse(c); return t >= from && t <= to; }).map((c) => c.slice(0, 10).replace(/-/g, "")))].slice(0, 15);
+      const lists = [d0, ...(await Promise.all(days.map((k) => getJSON(`${base}?dates=${k}`).catch(() => null))))];
+      for (const d of lists) for (const raw of d?.events || []) {
+        const e = compactEvent(raw, lg);
+        const cur = S.events.get(e.id);
+        if (!cur) added = true;
+        if (!cur || cur.st === "pre" || e.st !== "pre") S.events.set(e.id, e);
+      }
+    }
+  } finally { upcomingBusy = false; }
+  if (added) render();
 }
 
 async function loadStandings() {
@@ -1041,7 +1067,7 @@ async function poll() {
   clearTimeout(pollTimer);
   const keys = activeKeys();
   const urls = [["lp", ESPN_SB], ["pn", ESPN_SB2], ...[...keys].map((k) => { const [lg, d] = k.split("|"); return [lg, `${lg === "pn" ? ESPN_SB2 : ESPN_SB}?dates=${d}`]; })];
-  let changed = false, finished = false;
+  let changed = false, finished = false, playoffDone = false;
   const res = await Promise.allSettled(urls.map(([lg, u]) => getJSON(u).then((j) => ({ lg, j }))));
   for (const r of res) {
     if (r.status !== "fulfilled") continue;
@@ -1051,7 +1077,7 @@ async function poll() {
       if (prev && JSON.stringify(prev) === JSON.stringify(e)) continue;
       S.events.set(e.id, e);
       changed = true;
-      if (prev && prev.st === "in" && e.st === "post") finished = true;
+      if (prev && prev.st === "in" && e.st === "post") { finished = true; if (e.r !== "reg") playoffDone = true; }
       if (!liveBase) continue; // primera lectura al abrir o volver a la app: sin avisos de goles viejos
       if (prev && prev.st !== "pre" && prev.h[1] != null) {
         if ((e.h[1] ?? 0) > (prev.h[1] ?? 0)) goalAlert(e, e.h);
@@ -1066,6 +1092,10 @@ async function poll() {
   const isLive = liveEvents().length > 0 || activeKeys().size > 0;
   if (finished || now - lastStandings > (isLive ? 2 * 60000 : STANDINGS_MS)) { lastStandings = now; await loadStandings(); changed = true; }
   if (now - lastFixture > FIXTURE_MS) { lastFixture = now; await loadFixture().catch(() => {}); changed = true; }
+  // Terminó un partido de playoff: buscar ya los cruces de la ronda siguiente (y otra vez en unos minutos,
+  // porque ESPN a veces tarda en cargarlos); además se revisa cada 10 minutos
+  if (playoffDone) { refreshUpcoming(true); setTimeout(() => refreshUpcoming(true), 5 * 60000); setTimeout(() => refreshUpcoming(true), 20 * 60000); }
+  else refreshUpcoming();
   if (changed) { render(); stamp(); }
   if (res.some((r) => r.status === "fulfilled")) liveBase = true;
   pollTimer = setTimeout(poll, isLive ? LIVE_MS : IDLE_MS);
@@ -1121,6 +1151,7 @@ if (!standalone && isIOS) {
   S.ready = true;
   render(false); stamp();
   loadNews().then(() => render());
+  refreshUpcoming(true);
   loadVideos().then(() => render());
   setInterval(() => loadVideos().then(() => render()), 15 * 60000);
   setInterval(() => loadNews().then(() => { const r = route().r; if (r === "noticias" || r === "club") render(); }), 15 * 60000);
