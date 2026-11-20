@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=23";
-import { compactEvent } from "./compact.js?v=23";
-import { confetti, fiestaSound } from "./fiesta.js?v=23";
-import { buildFacts } from "./datos.js?v=23";
-import { computeTables } from "./tables.js?v=23";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=24";
+import { compactEvent } from "./compact.js?v=24";
+import { confetti, fiestaSound } from "./fiesta.js?v=24";
+import { buildFacts } from "./datos.js?v=24";
+import { computeTables } from "./tables.js?v=24";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -358,7 +358,7 @@ function viewAnual() {
     <div class="legend"><span><i style="background:var(--lib)"></i>Copa Libertadores (3 mejores; si ya clasificaron por título, el cupo pasa al siguiente)</span><span><i style="background:var(--down)"></i>Desciende por tabla anual</span></div></div>`;
 }
 
-function viewPromedios() {
+function viewPromediosActual() {
   const pr = promedios(annual());
   if (!pr.length) return `<p class="loading">Cargando…</p>`;
   const { byProm, byAnual } = relegated();
@@ -369,6 +369,43 @@ function viewPromedios() {
   return `<div class="card"><h2>Promedios<small>2024 + 2025 + 2026</small></h2>
     <table class="t"><thead><tr><th>#</th><th style="text-align:left">Equipo</th><th>Prom.</th><th>Pts</th><th>PJ</th><th class="hide-s">24-25</th><th class="hide-s">2026</th></tr></thead><tbody>${body}</tbody></table>
     <div class="legend"><span><i style="background:var(--down)"></i>Desciende por promedios. Si el mismo club es último en ambas tablas, el segundo descenso es para el anteúltimo de la anual.</span></div></div>`;
+}
+
+// ---------- Promedios del próximo torneo (2027): 2025 + 2026, sin descendidos y con ascendidos ----------
+// Puntos de 2025 (32 PJ) de la tabla de El Gráfico; los de 2026 salen de la tabla anual en vivo.
+const P2025 = { "5": 62, "15": 53, "16": 53, "21": 40, "3": 57, "17": 66, "11": 47, "10": 47, "12": 50, "19": 34, "8": 42, "17702": 52,
+  "20": 39, "10060": 49, "8950": 38, "18": 51, "7764": 35, "9744": 43, "7767": 49, "2975": 34, "9": 38, "4": 37, "9785": 34, "11989": 42,
+  "14": 33, "235": 35, "10158": 35, "11972": 0 };
+const DESCENDIDOS_2026 = ["9739", "19685"]; // Aldosivi y Estudiantes de Río Cuarto
+const ASCENDIDOS_2027 = [{ id: "6756", name: "Godoy Cruz" }]; // campeón de la Primera Nacional (falta el ganador del Reducido)
+function promedios2027() {
+  const an = Object.fromEntries(annual().map((r) => [r.id, r]));
+  const rows = Object.keys(P2025).filter((id) => !DESCENDIDOS_2026.includes(id)).map((id) => {
+    const r = an[id] || { pts: 0, pj: 0 };
+    const p25 = P2025[id], pj25 = p25 || id !== "11972" ? 32 : 0;
+    const pts = p25 + r.pts, pj = pj25 + r.pj;
+    return { id, p25, p26: r.pts, pts, pj, prom: pj ? pts / pj : 0 };
+  }).sort((a, b) => b.prom - a.prom || b.pts - a.pts);
+  return rows;
+}
+function viewPromedios2027() {
+  const pr = promedios2027();
+  if (!annual().length) return `<p class="loading">Cargando…</p>`;
+  const lastId = pr.at(-1)?.id;
+  const dm = dangerMarks(pr, [lastId], NEAR_LP);
+  const body = pr.map((r, i) => `<tr class="${favs.has(r.id) ? "me" : ""}">
+    <td class="pos">${i + 1}</td>${teamCell(r.id, dm[r.id])}<td class="pts">${r.prom.toFixed(3).replace(".", ",")}</td><td>${r.pts}</td><td>${r.pj}</td>
+    <td class="hide-s">${r.p25 || "–"}</td><td class="hide-s">${r.p26}</td></tr>`).join("");
+  const asc = ASCENDIDOS_2027.map((t) => `<tr class="asc"><td class="pos">–</td><td class="tm"><a href="#/club/${t.id}">${img(t.id, "tlogo")}<span>${esc(t.name)}</span><span class="badge-asc">⬆️ Ascendido</span></a></td><td class="pts">–</td><td>0</td><td>0</td><td class="hide-s">–</td><td class="hide-s">–</td></tr>`).join("")
+    + `<tr class="asc"><td class="pos">–</td><td class="tm"><span class="tbd">Ganador del Reducido <span class="badge-asc">⬆️ A definir</span></span></td><td class="pts">–</td><td>0</td><td>0</td><td class="hide-s">–</td><td class="hide-s">–</td></tr>`;
+  return `<div class="card"><h2>Promedios del próximo torneo<small>2025 + 2026 (+ 2027)</small></h2>
+    <table class="t"><thead><tr><th>#</th><th style="text-align:left">Equipo</th><th>Prom.</th><th>Pts</th><th>PJ</th><th class="hide-s">2025</th><th class="hide-s">2026</th></tr></thead><tbody>${body}${asc}</tbody></table>
+    <div class="legend"><span>Sin Aldosivi ni Estudiantes de Río Cuarto (descendidos). Los ascendidos arrancan de cero y entran a la tabla cuando juegan. Los puntos de 2026 se actualizan solos hasta el final del Clausura.</span></div></div>`;
+}
+function viewPromedios() {
+  const t = S.sel.promT || "2027";
+  return `<div class="seg"><button data-promt="2026" class="${t === "2026" ? "act" : ""}">Temporada 2026</button><button data-promt="2027" class="${t === "2027" ? "act" : ""}">Próximo torneo (2027)</button></div>
+    ${t === "2026" ? viewPromediosActual() : viewPromedios2027()}`;
 }
 
 function bracketMatch(e) {
@@ -911,10 +948,11 @@ function renderLiveStrip() {
 }
 
 document.addEventListener("click", (ev) => {
-  const t = ev.target.closest("[data-mbell],[data-nround],[data-torneo],[data-round],[data-ttabla],[data-tplay],[data-fav],[data-goto],[data-nextfact],[data-fs],[data-simt],[data-simr],[data-simtab],[data-simreset],[data-simclear],.match");
+  const t = ev.target.closest("[data-promt],[data-mbell],[data-nround],[data-torneo],[data-round],[data-ttabla],[data-tplay],[data-fav],[data-goto],[data-nextfact],[data-fs],[data-simt],[data-simr],[data-simtab],[data-simreset],[data-simclear],.match");
   if (!t) return;
   if (t.dataset.nround) { S.sel.nRound = t.dataset.nround; render(); return; }
   if (t.dataset.mbell) { toggleMatchBell(t.dataset.mbell); return; }
+  if (t.dataset.promt) { S.sel.promT = t.dataset.promt; render(); return; }
   if (t.dataset.nextfact !== undefined) { S.sel.fact++; render(); }
   else if (t.dataset.fs !== undefined) { const d = document.documentElement; document.fullscreenElement ? document.exitFullscreen() : d.requestFullscreen?.().catch(() => {}); ensureAudio(); }
   else if (t.dataset.simt) { S.sel.simT = t.dataset.simt; S.sel.simR = null; render(false); }
