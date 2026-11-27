@@ -1,8 +1,8 @@
-import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=24";
-import { compactEvent } from "./compact.js?v=24";
-import { confetti, fiestaSound } from "./fiesta.js?v=24";
-import { buildFacts } from "./datos.js?v=24";
-import { computeTables } from "./tables.js?v=24";
+import { TEAMS, NAMES, logo, teamName } from "./teams.js?v=25";
+import { compactEvent } from "./compact.js?v=25";
+import { confetti, fiestaSound } from "./fiesta.js?v=25";
+import { buildFacts } from "./datos.js?v=25";
+import { computeTables } from "./tables.js?v=25";
 
 // ---------- Configuración ----------
 const REPO_RAW = "https://raw.githubusercontent.com/rda7777/liga-profesional/main/data/";
@@ -268,6 +268,7 @@ function matchRow(e, opts = {}) {
       ${e.st === "post" ? `<span class="mbell"></span>` : `<button class="mbell${notifies(e) ? " on" : ""}${matchPref[e.id] ? " fixed" : ""}" data-mbell="${e.id}" title="${notifies(e) ? "Silenciar este partido" : "Avisarme los goles de este partido"}">${notifies(e) ? "🔔" : "🔕"}</button>`}
     </div>
     ${gh.length || ga.length || e.st === "post" ? `<div class="mgoals"><div></div><div class="hcol">${gh.join("<br>")}</div><div class="vcol">${videoLink(e)}</div><div>${ga.join("<br>")}</div></div>` : ""}
+    ${e.t === "N" ? advLine(e) : ""}
     <div class="mdet">
       <div class="venue">${e.v ? "🏟 " + esc(e.v) + " · " : ""}${fDay.format(new Date(e.d))}${e.tbd ? "" : " " + fHour.format(new Date(e.d))}</div></div>
   </div>`;
@@ -815,6 +816,35 @@ function nSeries(list, round) {
     return { legs, teams: [x, y], tot, w };
   });
 }
+// Ventaja deportiva en el Reducido: el mejor ubicado de la tabla general (la final no tiene)
+function nAdvantage(e) {
+  if (!e || e.t !== "N" || !["p1", "qf", "sf"].includes(e.r)) return null;
+  const adv = nRank(e.h[0]) <= nRank(e.a[0]) ? e.h : e.a;
+  const other = adv === e.h ? e.a : e.h;
+  let leg = null, tot = null;
+  if (e.r !== "p1") {
+    const legs = nEvents().filter((x) => x.r === e.r && [x.h[0], x.a[0]].sort().join() === [e.h[0], e.a[0]].sort().join()).sort((a, b) => a.d.localeCompare(b.d));
+    leg = legs.findIndex((x) => x.id === e.id) === 0 ? "ida" : "vuelta";
+    tot = { [adv[0]]: 0, [other[0]]: 0 };
+    for (const l of legs) if (l.st !== "pre") { tot[l.h[0]] += l.h[1] ?? 0; tot[l.a[0]] += l.a[1] ?? 0; }
+  }
+  return { adv, other, leg, tot };
+}
+function advLine(e) {
+  const v = nAdvantage(e);
+  if (!v) return "";
+  const A = esc(nameOf(v.adv)), B = esc(nameOf(v.other));
+  if (e.r === "p1") {
+    if (e.st === "post") return "";
+    return `<div class="advline">🛡️ <b>${A}</b> tiene ventaja deportiva: con un empate pasa de ronda</div>`;
+  }
+  if (v.leg === "ida") return `<div class="advline">🛡️ <b>${A}</b> tiene ventaja deportiva: si la serie termina igualada en el global, pasa ${A}</div>`;
+  const ta = v.tot[v.adv[0]], tb = v.tot[v.other[0]];
+  const glob = `Global ${A} ${ta}-${tb} ${B}`;
+  if (e.st === "post") return `<div class="advline">${glob} · ${ta >= tb ? `pasa <b>${A}</b>${ta === tb ? " por ventaja deportiva" : ""}` : `pasa <b>${B}</b>`}</div>`;
+  const now = e.st === "in" ? (ta >= tb ? `hoy pasa <b>${A}</b>${ta === tb ? " (ventaja)" : ""}` : `hoy pasa <b>${B}</b>`) : (ta === tb ? `con igualdad en el global pasa <b>${A}</b>` : ta > tb ? `<b>${B}</b> necesita ganar por ${ta - tb + 1} goles; si no, pasa <b>${A}</b>` : `<b>${A}</b> necesita ganar por ${tb - ta} gol${tb - ta > 1 ? "es" : ""} (con eso pasa por ventaja deportiva)`);
+  return `<div class="advline">🛡️ ${glob} · ${now}</div>`;
+}
 const sideOf = (id, e) => e && (e.h[0] === id ? e.h : e.a[0] === id ? e.a : null);
 const teamRow = (id, name, score, win) => `<div class="bt${win ? " w" : ""}">${id ? img(id) : ""}<span>${esc(name)}</span><b>${score ?? ""}</b></div>`;
 function singleCard(e) {
@@ -829,7 +859,9 @@ function seriesCard(sr) {
   const nm = (id) => nameOf(sideOf(id, sr.legs[0]));
   const started = sr.legs.some((l) => l.st !== "pre");
   const legsTxt = sr.legs.map((l, i) => `${i ? "Vuelta" : "Ida"}: ${l.st === "pre" ? (l.tbd ? "a conf." : fShort.format(new Date(l.d))) : `${nameOf(l.h)} ${l.h[1]}-${l.a[1]} ${nameOf(l.a)}`}`).join(" · ");
-  return `<a class="bm" href="#/" data-goto="${sr.legs.at(-1).id}">${teamRow(x, nm(x), started ? sr.tot[x] : "", sr.w === x)}${teamRow(y, nm(y), started ? sr.tot[y] : "", sr.w === y)}<div class="bi">${legsTxt}${started ? " · global" : ""}</div></a>`;
+  const advId = sr.legs[0].r === "f" ? null : (nRank(x) <= nRank(y) ? x : y);
+  const nmA = (id) => nm(id) + (id === advId ? " 🛡️" : "");
+  return `<a class="bm" href="#/" data-goto="${sr.legs.at(-1).id}">${teamRow(x, nmA(x), started ? sr.tot[x] : "", sr.w === x)}${teamRow(y, nmA(y), started ? sr.tot[y] : "", sr.w === y)}<div class="bi">${legsTxt}${started ? " · global" : ""}</div></a>`;
 }
 const projCard = (a, b, note) => `<div class="bm proj">${teamRow(a.id, a.name, "", false)}${teamRow(b.id, b.name, "", false)}<div class="bi">${note}</div></div>`;
 
